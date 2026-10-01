@@ -1,13 +1,13 @@
 import 'dart:io' show Platform;
 
-abstract final class PlatformUtils {
-  @pragma("vm:platform-const")
-  static final bool isMobile = Platform.isAndroid || Platform.isIOS;
+import 'package:os_type/os_type.dart';
 
-  @pragma("vm:platform-const")
-  static final bool isDesktop =
-      Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+abstract final class PlatformUtils {
+  static final bool isMobile = OS.isMobileOS;
+
+  static final bool isDesktop = OS.isPCOS;
 
   @pragma("vm:platform-const")
   static final bool isDarwin = Platform.isIOS || Platform.isMacOS;
 }
+

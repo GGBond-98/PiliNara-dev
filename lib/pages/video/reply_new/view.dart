@@ -7,8 +7,6 @@ import 'package:PiliPlus/common/widgets/custom_icon.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/controller.dart'
     show RichTextType, RichTextEditingDeltaReplacement;
 import 'package:PiliPlus/common/widgets/flutter/text_field/text_field.dart';
-import 'package:PiliPlus/common/widgets/scroll_physics.dart'
-    show platformClampingPhysics;
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/grpc/bilibili/main/community/reply/v1.pb.dart'
     show ReplyInfo;
@@ -225,7 +223,7 @@ class _ReplyPageState extends CommonRichTextPubPageState<ReplyPage> {
 
   @override
   Widget buildMorePanel() {
-    double height = context.isTablet ? 300 : 170;
+    double height = ContextExtensions(context).isTablet ? 300 : 170;
     final keyboardHeight = controller.keyboardHeight;
     if (keyboardHeight != 0) {
       height = max(height, keyboardHeight);
@@ -279,12 +277,14 @@ class _ReplyPageState extends CommonRichTextPubPageState<ReplyPage> {
     return SizedBox(
       height: height,
       child: GridView(
-        physics: platformClampingPhysics,
+        physics: const ClampingScrollPhysics(),
         padding: const EdgeInsets.only(left: 12, bottom: 12, right: 12),
         gridDelegate: gridDelegate,
         children: [
           item(
             onTap: () async {
+              // 鸿蒙适配：跳转搜索页期间冻结聊天面板，避免面板高度被重置
+              controller.keepChatPanel();
               final ({String title, String url})? res = await Get.to(
                 ReplySearchPage(type: widget.replyType, oid: widget.oid),
               );
@@ -295,6 +295,7 @@ class _ReplyPageState extends CommonRichTextPubPageState<ReplyPage> {
                   rawText: '${res.url} ',
                 );
               }
+              controller.restoreChatPanel();
             },
             icon: Icon(Icons.post_add, size: 28, color: color),
             title: '插入内容',
@@ -345,16 +346,13 @@ class _ReplyPageState extends CommonRichTextPubPageState<ReplyPage> {
                     final res = await plPlayerController
                         .plPlayerController
                         .videoPlayerController
-                        ?.screenshot();
+                        ?.screenshot(format: 'image/png');
                     if (res != null) {
-                      final png = await res.toByteData(format: .png);
-                      if (png != null) {
-                        final path =
-                            '$tmpDirPath/${Utils.generateRandomString(8)}.png';
-                        await File(path).writeAsBytes(png.buffer.asUint8List());
-                        imageList.add(FilePicModel(path: path));
-                      }
-                      res.dispose();
+                      // 鸿蒙 fork 的 screenshot 直接返回 png 字节
+                      final path =
+                          '$tmpDirPath/${Utils.generateRandomString(8)}.png';
+                      await File(path).writeAsBytes(res);
+                      imageList.add(FilePicModel(path: path));
                     } else {
                       debugPrint('null screenshot');
                     }

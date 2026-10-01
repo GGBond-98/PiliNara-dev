@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:PiliPlus/common/widgets/gesture/horizontal_drag_gesture_recognizer.dart'
-    show deviceTouchSlop;
 import 'package:PiliPlus/common/widgets/pair.dart';
 import 'package:PiliPlus/http/constants.dart';
 import 'package:PiliPlus/models/common/bar_hide_type.dart';
@@ -53,6 +51,7 @@ import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:os_type/os_type.dart';
 
 abstract final class Pref {
   static final Box _setting = GStorage.setting;
@@ -403,14 +402,14 @@ abstract final class Pref {
         defaultValue: UpPanelPosition.leftFixed.index,
       )];
 
+  /// 默认「按视频方向」：全屏方向该锁哪条轴只跟视频有关，与是否平板、是否开
+  /// 横屏适配无关（那两者决定的是页面方向，见 fullscreen.dart 的各 mode）。
+  /// 旧版本会按「平板 + 横屏适配」推导出 .none 并落库，冻结后点全屏永远不转屏，
+  /// 已由 GStorage.init 中的一次性迁移清除。
   static FullScreenMode get fullScreenMode {
     int? index = _setting.get(SettingBoxKey.fullScreenMode);
     if (index == null) {
-      final FullScreenMode mode = horizontalScreen && DeviceUtils.isTablet
-          ? .none
-          : .auto;
-      _setting.put(SettingBoxKey.fullScreenMode, mode.index);
-      return mode;
+      return .auto;
     }
     return FullScreenMode.values[index];
   }
@@ -465,6 +464,7 @@ abstract final class Pref {
     if (codecs is List) {
       return codecs.map((i) => VideoDecodeFormatType.values.byName(i)).toList();
     }
+    if (OS.isHarmony) return const <VideoDecodeFormatType>[.HEVC, .AVC];
     return const <VideoDecodeFormatType>[.AVC, .AV1];
   }
 
@@ -478,9 +478,7 @@ abstract final class Pref {
 
   static String get hardwareDecoding => _setting.get(
     SettingBoxKey.hardwareDecoding,
-    defaultValue: Platform.isAndroid
-        ? HwDecType.androidDefault
-        : HwDecType.auto.hwdec,
+    defaultValue: HwDecType.kHwdec,
   );
 
   static String get videoSync =>
@@ -806,8 +804,10 @@ abstract final class Pref {
     return superResolutionType ?? SuperResolutionType.disable;
   }
 
-  static bool get preInitPlayer =>
-      _setting.get(SettingBoxKey.preInitPlayer, defaultValue: false);
+  static bool get preInitPlayer => _setting.get(
+    SettingBoxKey.preInitPlayer,
+    defaultValue: OS.isHarmony,
+  );
 
   static bool get mainTabBarView =>
       _setting.get(SettingBoxKey.mainTabBarView, defaultValue: false);
@@ -936,25 +936,22 @@ abstract final class Pref {
     defaultValue: LiveQuality.superHD.code,
   );
 
-  static FontWeight get appFontWeight {
+  /// `FontWeight.values` 的下标；`-1` 表示「跟随系统」——鸿蒙下由
+  /// [ThemeUtils.getThemeData] 读 `HarmonyChannel.systemFontWeightScale` 映射成
+  /// 具体字重（见 lib/utils/theme_utils.dart）。上游 828de30e9 把这一档去掉、
+  /// 返回值改成了 `FontWeight`，鸿蒙保留 `int` + `-1`，只跟进它的 V1→V2 键迁移。
+  static int get appFontWeight {
     // TODO: remove next 2 version
     const appFontWeightV1 = 'appFontWeight';
     final int? valV1 = _setting.get(appFontWeightV1);
     if (valV1 != null) {
-      _setting.delete(appFontWeightV1);
-      if (valV1 == -1) {
-        return .normal;
-      } else {
-        _setting.put(SettingBoxKey.appFontWeightV2, valV1);
-        return .values[valV1];
-      }
+      _setting
+        ..delete(appFontWeightV1)
+        ..put(SettingBoxKey.appFontWeightV2, valV1);
+      return valV1;
     }
 
-    final int? val = _setting.get(SettingBoxKey.appFontWeightV2);
-    if (val == null) {
-      return .normal;
-    }
-    return .values[val];
+    return _setting.get(SettingBoxKey.appFontWeightV2, defaultValue: -1);
   }
 
   static String? get customFontPath =>
@@ -1265,10 +1262,28 @@ abstract final class Pref {
   static bool get enableGradientBg =>
       _setting.get(SettingBoxKey.enableGradientBg, defaultValue: true);
 
+  static bool get enableLGBar =>
+      _setting.get(SettingBoxKey.enableLGBar, defaultValue: false);
+
+  static bool get enableHdsBar =>
+      _setting.get(SettingBoxKey.enableHdsBar, defaultValue: false);
+
+  static bool get enableHdsTopBar =>
+      _setting.get(SettingBoxKey.enableHdsTopBar, defaultValue: false);
+
+  static bool get enableStatusBarTapToTop =>
+      _setting.get(SettingBoxKey.enableStatusBarTapToTop, defaultValue: false);
+
+  static bool get showActualVolume =>
+      _setting.get(SettingBoxKey.showActualVolume, defaultValue: false);
+
+  static bool get enableHeroCoverAnimation =>
+      _setting.get(SettingBoxKey.enableHeroCoverAnimation, defaultValue: false);
+
   static Transition get pageTransition =>
       Transition.values[_setting.get(
         SettingBoxKey.pageTransition,
-        defaultValue: Transition.native.index,
+        defaultValue: Transition.cupertino.index,
       )];
 
   static bool get enableQuickDouble =>
@@ -1379,6 +1394,10 @@ abstract final class Pref {
 
   static bool get enableAutoLongPressSpeed =>
       _setting.get(SettingBoxKey.enableAutoLongPressSpeed, defaultValue: false);
+
+  /// 「动态长按倍速」的倍率系数，长按时播放速度 = 当前速度 * 该系数。
+  static double get longPressSpeedFactor =>
+      _setting.get(SettingBoxKey.longPressSpeedFactor, defaultValue: 2.0);
 
   static double get playSpeedDefault =>
       _video.get(VideoBoxKey.playSpeedDefault, defaultValue: 1.0);
@@ -1543,6 +1562,8 @@ abstract final class Pref {
 
   static String? get downloadPath => _setting.get(SettingBoxKey.downloadPath);
 
+  static String? get imageSavePath => _setting.get(SettingBoxKey.imageSavePath);
+
   static String? get liveCdnUrl => _setting.get(SettingBoxKey.liveCdnUrl);
 
   static bool get showBatteryLevel => _setting.get(
@@ -1562,10 +1583,10 @@ abstract final class Pref {
   static bool get showDynDispute =>
       _setting.get(SettingBoxKey.showDynDispute, defaultValue: false);
 
-  static double get touchSlopH => _setting.get(
-    SettingBoxKey.touchSlopH,
-    defaultValue: deviceTouchSlop + 6.0,
-  );
+  // 竖向滚动 slop 已在 main._builder 统一为 8 逻辑像素（鸿蒙），横向取 12
+  // 时约 34° 以内的滑动可赢得竞技场，横竖手势按主导方向竞争。
+  static double get touchSlopH =>
+      _setting.get(SettingBoxKey.touchSlopH, defaultValue: 12.0);
 
   static bool get saveReply =>
       _setting.get(SettingBoxKey.saveReply, defaultValue: true);
@@ -1687,4 +1708,7 @@ abstract final class Pref {
           defaultValue: const <String, String>{},
         ),
       );
+
+  static bool get enableEmoteTooltip =>
+      _setting.get(SettingBoxKey.enableEmoteTooltip, defaultValue: false);
 }

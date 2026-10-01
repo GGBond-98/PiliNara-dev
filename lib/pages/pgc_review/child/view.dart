@@ -20,9 +20,9 @@ import 'package:PiliPlus/utils/bili_utils.dart';
 import 'package:PiliPlus/utils/extension/theme_ext.dart';
 import 'package:PiliPlus/utils/num_utils.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
-import 'package:material_ui/material_ui.dart';
 
 class PgcReviewChildPage extends StatefulWidget {
   const PgcReviewChildPage({
@@ -126,14 +126,13 @@ class _PgcReviewChildPageState extends State<PgcReviewChildPage>
   }
 
   Widget _itemWidget(ThemeData theme, int index, PgcReviewItemModel item) {
-    final author = item.author!;
     void showMore() => showDialog(
       context: context,
       builder: (context) => SimpleDialog(
         clipBehavior: Clip.hardEdge,
         contentPadding: const EdgeInsets.symmetric(vertical: 12),
         children: [
-          if (author.mid == Accounts.main.mid) ...[
+          if (item.author!.mid == Accounts.main.mid) ...[
             DialogOption(
               child: const Text('编辑', style: TextStyle(fontSize: 14)),
               onPressed: () {
@@ -205,14 +204,14 @@ class _PgcReviewChildPageState extends State<PgcReviewChildPage>
             children: [
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () => Get.toNamed('/member?mid=${author.mid}'),
+                onTap: () => Get.toNamed('/member?mid=${item.author!.mid}'),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     NetworkImgLayer(
                       height: 34,
                       width: 34,
-                      src: author.avatar,
+                      src: item.author!.avatar,
                       type: ImageType.avatar,
                     ),
                     const SizedBox(width: 10),
@@ -226,19 +225,19 @@ class _PgcReviewChildPageState extends State<PgcReviewChildPage>
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              author.uname!,
+                              item.author!.uname!,
                               style: TextStyle(
                                 color:
-                                    author.vip != null &&
-                                        author.vip!.status > 0 &&
-                                        author.vip!.type == 2
+                                    item.author?.vip?.status != null &&
+                                        item.author!.vip!.status > 0 &&
+                                        item.author!.vip!.type == 2
                                     ? theme.colorScheme.vipColor
                                     : theme.colorScheme.outline,
                                 fontSize: 13,
                               ),
                             ),
                             BiliUtils.levelPicture(
-                              author.level!,
+                              item.author!.level!,
                               height: 11,
                             ),
                           ],

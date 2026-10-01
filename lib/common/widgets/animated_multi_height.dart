@@ -1,8 +1,8 @@
 import 'package:PiliPlus/common/widgets/animated_height.dart' show Heights;
 import 'package:PiliPlus/utils/extension/num_ext.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart'
     show ClipRectLayer, LayerHandle, PipelineOwner, RenderProxyBox;
-import 'package:material_ui/material_ui.dart';
 
 class AnimatedMultiHeight extends StatefulWidget {
   const AnimatedMultiHeight({
@@ -99,11 +99,15 @@ class RenderAnimatedMultiHeight extends RenderProxyBox {
     required TickerProvider vsync,
     required Duration duration,
     Duration? reverseDuration,
-    this._curve = Curves.linear,
-    this._clipBehavior = .hardEdge,
-    this._onEnd,
-    required this._expand,
-  }) : _vsync = vsync {
+    Curve curve = Curves.linear,
+    Clip clipBehavior = .hardEdge,
+    VoidCallback? onEnd,
+    required bool expand,
+  }) : _curve = curve,
+       _clipBehavior = clipBehavior,
+       _onEnd = onEnd,
+       _expand = expand,
+       _vsync = vsync {
     _controller =
         AnimationController(
           vsync: vsync,

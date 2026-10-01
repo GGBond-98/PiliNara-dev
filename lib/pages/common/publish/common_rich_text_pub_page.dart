@@ -1,6 +1,5 @@
-import 'dart:io' show File, HttpException;
+import 'dart:io';
 
-import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/button/icon_button.dart';
 import 'package:PiliPlus/common/widgets/button/toolbar_icon_button.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/controller.dart';
@@ -29,12 +28,12 @@ import 'package:cached_network_image_ce/cached_network_image.dart'
 import 'package:dio/dio.dart' show CancelToken;
 import 'package:easy_debounce/easy_throttle.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:material_ui/material_ui.dart';
 
 abstract class CommonRichTextPubPage
     extends CommonPublishPage<List<RichTextItem>> {
@@ -113,23 +112,27 @@ abstract class CommonRichTextPubPageState<T extends CommonRichTextPubPage>
       clipBehavior: Clip.none,
       children: [
         GestureDetector(
-          onTap: () => PageUtils.imageView(
-            imgList: imageList
-                .map(
-                  (img) => switch (img) {
-                    FilePicModel e => SourceModel(
-                      url: e.path,
-                      sourceType: .fileImage,
-                    ),
-                    OpusPicModel e => SourceModel(
-                      url: e.url!,
-                      sourceType: .networkImage,
-                    ),
-                  },
-                )
-                .toList(),
-            initialPage: index,
-          ),
+          onTap: () async {
+            controller.keepChatPanel();
+            await PageUtils.imageView(
+              imgList: imageList
+                  .map(
+                    (img) => switch (img) {
+                      FilePicModel e => SourceModel(
+                        url: e.path,
+                        sourceType: SourceType.fileImage,
+                      ),
+                      OpusPicModel e => SourceModel(
+                        url: e.url!,
+                        sourceType: SourceType.networkImage,
+                      ),
+                    },
+                  )
+                  .toList(),
+              initialPage: index,
+            );
+            controller.restoreChatPanel();
+          },
           onLongPress: () {
             Feedback.forLongPress(context);
             onClear();
@@ -143,16 +146,16 @@ abstract class CommonRichTextPubPageState<T extends CommonRichTextPubPage>
                 FilePicModel e => Image.file(
                   File(e.path),
                   height: height,
-                  filterQuality: .low,
+                  filterQuality: FilterQuality.low,
                   cacheHeight: height.cacheSize(context),
                 ),
                 OpusPicModel e => CachedNetworkImage(
                   imageUrl: ImageUtils.thumbnailUrl(e.url!),
                   height: height,
-                  filterQuality: .low,
+                  filterQuality: FilterQuality.low,
                   memCacheHeight: height.cacheSize(context),
-                  fadeInDuration: .zero,
-                  fadeOutDuration: .zero,
+                  fadeInDuration: Duration.zero,
+                  fadeOutDuration: Duration.zero,
                   placeholder: (_, _) => const SizedBox(width: 42),
                 ),
               },
@@ -210,6 +213,15 @@ abstract class CommonRichTextPubPageState<T extends CommonRichTextPubPage>
           statusBarLight: colorScheme.isLight,
         ),
         IOSUiSettings(title: '裁剪'),
+        // 鸿蒙化image_croppper修复，只能使用WebUiSettings
+        WebUiSettings(
+          context: context,
+          presentStyle: WebPresentStyle.dialog,
+          size: const CropperSize(
+            width: 520,
+            height: 520,
+          ),
+        ),
       ],
     );
     if (croppedFile != null) {
@@ -253,8 +265,8 @@ abstract class CommonRichTextPubPageState<T extends CommonRichTextPubPage>
     if (emote is e.Emote) {
       final isTextEmote = width == null;
       onInsertText(
-        isTextEmote ? emote.text! : Style.placeHolder,
-        .emoji,
+        isTextEmote ? emote.text! : '\uFFFC',
+        RichTextType.emoji,
         rawText: emote.text!,
         emote: isTextEmote
             ? null
@@ -266,8 +278,8 @@ abstract class CommonRichTextPubPageState<T extends CommonRichTextPubPage>
       );
     } else if (emote is Emoticon) {
       onInsertText(
-        Style.placeHolder,
-        .emoji,
+        '\uFFFC',
+        RichTextType.emoji,
         rawText: emote.emoji!,
         emote: Emote(
           url: emote.url!,
@@ -289,7 +301,7 @@ abstract class CommonRichTextPubPageState<T extends CommonRichTextPubPage>
             "type": 1,
             "biz_id": "",
           });
-        case .at:
+        case RichTextType.at:
           list
             ..add({
               "raw_text": '@${e.rawText}',
@@ -301,13 +313,13 @@ abstract class CommonRichTextPubPageState<T extends CommonRichTextPubPage>
               "type": 1,
               "biz_id": "",
             });
-        case .emoji:
+        case RichTextType.emoji:
           list.add({
             "raw_text": e.rawText,
             "type": 9,
             "biz_id": "",
           });
-        case .vote:
+        case RichTextType.vote:
           list
             ..add({
               "raw_text": e.rawText,
@@ -326,6 +338,8 @@ abstract class CommonRichTextPubPageState<T extends CommonRichTextPubPage>
 
   late double _mentionOffset = 0;
   Future<void>? onMention([bool fromClick = false]) async {
+    // 鸿蒙适配：@面板期间冻结聊天面板，避免面板高度被重置
+    controller.keepChatPanel();
     final res = await DynMentionPanel.onDynMention(
       context,
       offset: _mentionOffset,
@@ -342,12 +356,13 @@ abstract class CommonRichTextPubPageState<T extends CommonRichTextPubPage>
         res.clear();
       }
     }
+    controller.restoreChatPanel();
   }
 
   void _onInsertUser(MentionItem e, bool fromClick) {
     onInsertText(
       '@${e.name} ',
-      .at,
+      RichTextType.at,
       rawText: e.name,
       id: e.uid,
       fromClick: fromClick,
@@ -375,7 +390,7 @@ abstract class CommonRichTextPubPageState<T extends CommonRichTextPubPage>
       TextEditingDelta delta;
 
       if (selection.isCollapsed) {
-        if (type == .at && fromClick == false) {
+        if (type == RichTextType.at && fromClick == false) {
           delta = RichTextEditingDeltaReplacement(
             oldText: oldValue.text,
             replacementText: text,

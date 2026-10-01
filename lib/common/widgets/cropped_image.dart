@@ -70,14 +70,20 @@ class CroppedImage extends LeafRenderObjectWidget {
 
 class RenderCroppedImage extends RenderBox {
   RenderCroppedImage({
-    required this._preferredSize,
-    required this._image,
-    required this._srcRect,
-    required this._dstRect,
-    required this._rrect,
-    required this._imgPaint,
-    required this._borderPaint,
-  });
+    required Size preferredSize,
+    required ui.Image image,
+    required Rect srcRect,
+    required Rect dstRect,
+    required RRect rrect,
+    required Paint imgPaint,
+    required Paint borderPaint,
+  }) : _preferredSize = preferredSize,
+       _image = image,
+       _srcRect = srcRect,
+       _dstRect = dstRect,
+       _rrect = rrect,
+       _imgPaint = imgPaint,
+       _borderPaint = borderPaint;
 
   Size _preferredSize;
   Size get preferredSize => _preferredSize;

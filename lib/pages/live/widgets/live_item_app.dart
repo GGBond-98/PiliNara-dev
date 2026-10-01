@@ -33,13 +33,12 @@ class LiveCardVApp extends StatelessWidget {
     return Stack(
       children: [
         Card(
+          clipBehavior: Clip.hardEdge,
           child: InkWell(
             onTap: () => PageUtils.toLiveRoom(item.roomid),
             onLongPress: onLongPress,
             onSecondaryTap: PlatformUtils.isMobile ? null : onLongPress,
-            borderRadius: const .all(.circular(12)),
             child: Column(
-              crossAxisAlignment: .start,
               children: [
                 AspectRatio(
                   aspectRatio: Style.aspectRatio,
@@ -51,13 +50,17 @@ class LiveCardVApp extends StatelessWidget {
                           src: showFirstFrame ? item.systemCover : item.cover,
                           width: boxConstraints.maxWidth,
                           height: boxConstraints.maxHeight,
-                          borderRadius: const .vertical(top: .circular(12)),
+                          borderRadius: BorderRadius.zero, // 此处应为非表情类型，且默认不需要圆角
                         ),
                         Positioned(
                           left: 0,
                           right: 0,
                           bottom: 0,
-                          child: videoStat(),
+                          child: AnimatedOpacity(
+                            opacity: 1,
+                            duration: const Duration(milliseconds: 200),
+                            child: videoStat(),
+                          ),
                         ),
                       ],
                     ),
@@ -156,6 +159,7 @@ class LiveCardVApp extends StatelessWidget {
 
   Widget liveContent(ThemeData theme) {
     return Expanded(
+      flex: 1,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(5, 8, 5, 4),
         child: Column(
@@ -169,15 +173,18 @@ class LiveCardVApp extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-            Text(
-              item.uname.toString(),
-              textAlign: TextAlign.start,
-              style: TextStyle(
-                fontSize: theme.textTheme.labelMedium!.fontSize,
-                color: theme.colorScheme.outline,
+            Align(
+              alignment: .topLeft,
+              child: Text(
+                item.uname.toString(),
+                textAlign: TextAlign.start,
+                style: TextStyle(
+                  fontSize: theme.textTheme.labelMedium!.fontSize,
+                  color: theme.colorScheme.outline,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),

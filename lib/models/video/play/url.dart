@@ -22,9 +22,9 @@ class PlayUrlModel {
     this.seekType,
     this.dash,
     this.supportFormats,
-    this._lastPlayTime = 0,
+    int lastPlayTime = 0,
     this.lastPlayCid,
-  });
+  }) : _lastPlayTime = lastPlayTime;
 
   String? from;
   String? result;

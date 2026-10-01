@@ -7,6 +7,10 @@ abstract final class BuildConfig {
     'pili.name',
     defaultValue: 'SNAPSHOT',
   );
+  static const String versionTag = String.fromEnvironment(
+    'pili.tag',
+    defaultValue: versionName,
+  );
 
   static const int buildTime = int.fromEnvironment('pili.time');
   static const String commitHash = String.fromEnvironment(

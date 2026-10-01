@@ -27,9 +27,10 @@ class SimpleColoredBox extends ColoredBox {
 
 class RenderSimpleColoredBox extends RenderProxyBox {
   RenderSimpleColoredBox({
-    required this._color,
-    required this._isAntiAlias,
-  });
+    required Color color,
+    required bool isAntiAlias,
+  }) : _color = color,
+       _isAntiAlias = isAntiAlias;
 
   Color get color => _color;
   Color _color;

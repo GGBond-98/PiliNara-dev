@@ -21,6 +21,8 @@ analyzer:
     - windows/**
     - web/**
     - build/**
+    # TODO: jnigen 依赖未安装（见 AGENT.md §6），恢复 jnigen 生成时移除此行
+    - tool/jnigen.dart
     # - lib/common/widgets/flutter/**
 
 formatter:

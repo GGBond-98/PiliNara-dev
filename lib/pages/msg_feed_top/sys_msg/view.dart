@@ -5,7 +5,6 @@ import 'package:PiliPlus/common/widgets/flutter/list_tile.dart';
 import 'package:PiliPlus/common/widgets/flutter/refresh_indicator.dart';
 import 'package:PiliPlus/common/widgets/gesture/tap_gesture_recognizer.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
-import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/models_new/msg/msg_sys/data.dart';
 import 'package:PiliPlus/pages/msg_feed_top/sys_msg/controller.dart';
@@ -13,9 +12,10 @@ import 'package:PiliPlus/utils/app_scheme.dart';
 import 'package:PiliPlus/utils/id_utils.dart';
 import 'package:PiliPlus/utils/page_utils.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
+import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
+import 'package:material_ui/material_ui.dart' hide ListTile;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:material_ui/material_ui.dart' hide ListTile;
 
 class SysMsgPage extends StatefulWidget {
   const SysMsgPage({super.key});
@@ -59,87 +59,82 @@ class _SysMsgPageState extends State<SysMsgPage> {
     ThemeData theme,
     LoadingState<List<MsgSysItem>?> loadingState,
   ) {
-    switch (loadingState) {
-      case Loading():
-        return const SliverSafeArea(
-          top: false,
-          bottom: false,
-          sliver: SliverPrototypeExtentList(
-            prototypeItem: MsgFeedSysMsgSkeleton(),
-            delegate: SliverSingleChildDelegate(
-              count: 12,
-              child: MsgFeedSysMsgSkeleton(),
-            ),
+    late final divider = Divider(
+      indent: 72,
+      endIndent: 20,
+      height: 6,
+      color: Colors.grey.withValues(alpha: 0.1),
+    );
+    return switch (loadingState) {
+      Loading() => const SliverSafeArea(
+        sliver: SliverPrototypeExtentList(
+          prototypeItem: MsgFeedSysMsgSkeleton(),
+          delegate: SliverSingleChildDelegate(
+            count: 12,
+            child: MsgFeedSysMsgSkeleton(),
           ),
-        );
-      case Success(:final response):
-        if (response != null && response.isNotEmpty) {
-          final divider = Divider(
-            indent: 72,
-            endIndent: 20,
-            height: 6,
-            color: Colors.grey.withValues(alpha: 0.1),
-          );
-          return SliverList.separated(
-            itemCount: response.length,
-            itemBuilder: (context, int index) {
-              if (index == response.length - 1) {
-                _sysMsgController.onLoadMore();
-              }
-              final item = response[index];
-              void onLongPress() => showConfirmDialog(
-                context: context,
-                title: const Text('确定删除该通知?'),
-                onConfirm: () => _sysMsgController.onRemove(item.id, index),
-              );
-              return ListTile(
-                safeArea: true,
-                onLongPress: onLongPress,
-                onSecondaryTap: PlatformUtils.isMobile ? null : onLongPress,
-                title: Text(
-                  "${item.title}",
-                  style: theme.textTheme.titleMedium,
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 4),
-                    Text.rich(
-                      _buildContent(theme, item.content ?? ''),
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.85,
-                        ),
-                      ),
+        ),
+      ),
+      Success(:final response) =>
+        response != null && response.isNotEmpty
+            ? SliverList.separated(
+                itemCount: response.length,
+                itemBuilder: (context, int index) {
+                  if (index == response.length - 1) {
+                    _sysMsgController.onLoadMore();
+                  }
+                  final item = response[index];
+                  void onLongPress() => showConfirmDialog(
+                    context: context,
+                    title: const Text('确定删除该通知?'),
+                    onConfirm: () => _sysMsgController.onRemove(item.id, index),
+                  );
+                  return ListTile(
+                    safeArea: true,
+                    onLongPress: onLongPress,
+                    onSecondaryTap: PlatformUtils.isMobile ? null : onLongPress,
+                    title: Text(
+                      "${item.title}",
+                      style: theme.textTheme.titleMedium,
                     ),
-                    const SizedBox(height: 5),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        "${item.timeAt}",
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium!.copyWith(
-                          fontSize: 13,
-                          color: theme.colorScheme.outline,
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 4),
+                        Text.rich(
+                          _buildContent(theme, item.content ?? ''),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.85,
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 5),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            "${item.timeAt}",
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium!.copyWith(
+                              fontSize: 13,
+                              color: theme.colorScheme.outline,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              );
-            },
-            separatorBuilder: (context, index) => divider,
-          );
-        }
-        return HttpError(onReload: _sysMsgController.onReload);
-      case Error(:final errMsg):
-        return HttpError(
-          errMsg: errMsg,
-          onReload: _sysMsgController.onReload,
-        );
-    }
+                  );
+                },
+                separatorBuilder: (context, index) => divider,
+              )
+            : HttpError(onReload: _sysMsgController.onReload),
+      Error(:final errMsg) => HttpError(
+        errMsg: errMsg,
+        onReload: _sysMsgController.onReload,
+      ),
+    };
   }
 
   InlineSpan _buildContent(ThemeData theme, String content) {

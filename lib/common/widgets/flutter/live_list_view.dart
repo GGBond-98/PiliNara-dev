@@ -30,8 +30,6 @@ class LiveListView extends ListView {
     super.addAutomaticKeepAlives,
     super.addRepaintBoundaries,
     super.addSemanticIndexes,
-    // ignore: deprecated_member_use
-    super.cacheExtent,
     super.scrollCacheExtent,
     super.dragStartBehavior,
     super.keyboardDismissBehavior,

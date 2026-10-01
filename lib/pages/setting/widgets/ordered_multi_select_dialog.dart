@@ -1,7 +1,7 @@
 import 'package:PiliPlus/pages/setting/widgets/checkbox_num_list_tile.dart';
 import 'package:collection/collection.dart';
-import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:get/get.dart';
 
 class OrderedMultiSelectDialog<T> extends StatefulWidget {
   final Iterable<T> initValues;
@@ -38,7 +38,7 @@ class _OrderedMultiSelectDialogState<T>
       title: Text(widget.title),
       contentPadding: const EdgeInsets.only(top: 12),
       content: Material(
-        type: .transparency,
+        type: MaterialType.transparency,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,

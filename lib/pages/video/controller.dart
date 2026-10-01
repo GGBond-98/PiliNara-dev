@@ -8,6 +8,8 @@ import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/pair.dart';
 import 'package:PiliPlus/common/widgets/progress_bar/segment_progress_bar.dart';
 import 'package:PiliPlus/common/widgets/scaffold/mini_scaffold.dart';
+import 'package:PiliPlus/common/widgets/video_card/video_card_transition.dart'
+    show waitForVideoPageEntry;
 import 'package:PiliPlus/grpc/bilibili/app/listener/v1.pbenum.dart'
     show PlaylistSource;
 import 'package:PiliPlus/grpc/dm.dart';
@@ -156,9 +158,12 @@ class VideoDetailController extends GetxController
   String? audioUrl;
   Duration? defaultST;
   Duration? playedTime;
-  String get playedTimePos {
+  String playedTimePos(bool hasParams) {
     final pos = playedTime?.inMilliseconds;
-    return pos == null || pos == 0 ? '' : '?t=${pos / 1000}';
+    if (pos != null && pos > 0) {
+      return '${hasParams ? '&' : '?'}t=${pos / 1000}';
+    }
+    return '';
   }
 
   // 亮度
@@ -277,6 +282,8 @@ class VideoDetailController extends GetxController
         }
       }
       final isVertical = height > width;
+      // 尺寸解析后同步播放器方向标志与真实方向一致。
+      plPlayerController.isVertical = isVertical;
       if (_scrollCtr?.hasClients != true) {
         videoHeight = isVertical ? maxVideoHeight : minVideoHeight;
         if (this.isVertical.value != isVertical) {
@@ -339,6 +346,7 @@ class VideoDetailController extends GetxController
     } catch (_) {}
   }
 
+  bool imageview = false;
   final isLoginVideo = Accounts.get(AccountType.video).isLogin;
 
   late final watchProgress = GStorage.watchProgress;
@@ -488,6 +496,14 @@ class VideoDetailController extends GetxController
     heroTag = args['heroTag'];
     cover = RxString(args['cover'] ?? '');
     isVertical = RxBool(args['isVertical'] ?? false);
+
+    // 跨设备接续等场景显式指定初始播放/听视频状态，优先于本机设置
+    if (args['autoPlay'] case final bool autoPlay) {
+      _autoPlay.value = autoPlay;
+    }
+    if (args['onlyPlayAudio'] == true) {
+      plPlayerController.onlyPlayAudio.value = true;
+    }
 
     sourceType = args['sourceType'] ?? SourceType.normal;
     isFileSource = sourceType == SourceType.file;
@@ -888,15 +904,25 @@ class VideoDetailController extends GetxController
   }
 
   /// 更新画质、音质
-  void updatePlayer() {
+  ///
+  /// [autoplay] 默认 true（用户主动切画质/编码时理应继续播）；因链路变化触发的
+  /// 换流则应沿用换流前的播放状态，见 [_onNetworkScopeChanged]。
+  void updatePlayer({bool autoplay = true}) {
     final currentVideoQa = this.currentVideoQa.value;
     if (currentVideoQa == null) return;
-    _autoPlay.value = true;
+    _autoPlay.value = autoplay;
     playedTime = plPlayerController.videoPlayerController?.state.position;
     plPlayerController
       ..isBuffering.value = false
       ..buffered.value = 0;
 
+    _refreshSourceUrls(currentVideoQa);
+
+    playerInit();
+  }
+
+  /// 按当前画质、音质与解码偏好重新推导取流地址
+  void _refreshSourceUrls(VideoQuality currentVideoQa) {
     firstVideo = findVideoByQa(currentVideoQa.code, setCodecs: true);
     videoUrl = VideoUtils.getCdnUrl(firstVideo.playUrls);
 
@@ -908,8 +934,100 @@ class VideoDetailController extends GetxController
       );
       audioUrl = VideoUtils.getCdnUrl(firstAudio.playUrls, isAudio: true);
     }
+  }
 
-    playerInit();
+  StreamSubscription<bool>? _networkScopeSub;
+  // 链路已变、但当前不具备换流条件（正在请求 / 尚无 dash 数据），待条件满足后补做
+  bool _pendingNetworkReselect = false;
+
+  /// 按 [PlPlayerController.cacheVideoQa] / [PlPlayerController.cacheAudioQa]
+  /// 重新挑选目标画质与音质，实际换流交给 [updatePlayer]。
+  ///
+  /// 选取规则与 [queryVideoUrl] 中首次选流的一致；那边还要同时建立 firstVideo /
+  /// videoUrl / 视频高度，这里只需要档位，故未强行合并。
+  void _reselectQuality() {
+    final videoList = data.dash?.video;
+    if (videoList == null || videoList.isEmpty) return;
+
+    final cacheVideoQa = plPlayerController.cacheVideoQa;
+    final curHighestVideoQa = videoList.first.quality.code;
+    int targetVideoQa = curHighestVideoQa;
+    if (cacheVideoQa != null &&
+        data.acceptQuality?.isNotEmpty == true &&
+        cacheVideoQa <= curHighestVideoQa) {
+      targetVideoQa = data.acceptQuality!.findClosestTarget(
+        (e) => e <= cacheVideoQa,
+        (a, b) => a > b ? a : b,
+      );
+    }
+    currentVideoQa.value = VideoQuality.fromCode(targetVideoQa);
+
+    final audioList = data.dash?.audio;
+    if (audioList != null && audioList.isNotEmpty) {
+      final cacheAudioQa = plPlayerController.cacheAudioQa;
+      final List<int> audioIds = audioList.map((e) => e.id!).toList();
+      int closestNumber = audioIds.findClosestTarget(
+        (e) => e <= cacheAudioQa,
+        (a, b) => a > b ? a : b,
+      );
+      if (!audioIds.contains(cacheAudioQa) &&
+          audioIds.any((e) => e > cacheAudioQa)) {
+        closestNumber = AudioQuality.k192.code;
+      }
+      final firstAudio = audioList.firstWhere(
+        (e) => e.id == closestNumber,
+        orElse: () => audioList.first,
+      );
+      if (firstAudio.id case final int id?) {
+        currentAudioQa = AudioQuality.fromCode(id);
+      }
+    }
+  }
+
+  /// 链路在「宽带档 / 蜂窝档」之间翻转：重新套用该档的画质、音质与编码偏好，
+  /// 并按新档位换流，保留播放进度与播放/暂停状态。
+  void _onNetworkScopeChanged(bool useCellular) {
+    if (isClosed || isFileSource) return;
+    // preferCodecs 是本页自己的状态，无论是否持有播放器都该保持最新，
+    // 这样被叠加在后面的页面恢复时不会用陈旧的编码偏好
+    preferCodecs = useCellular ? Pref.preferCodecsCellular : Pref.preferCodecs;
+
+    // 以下会改动共享的播放器单例，只有当前持有它的页面才能做
+    if (!identical(plPlayerController.sourceOwner, this)) return;
+    plPlayerController
+      ..cacheVideoQa = useCellular
+          ? Pref.defaultVideoQaCellular
+          : Pref.defaultVideoQa
+      ..cacheAudioQa = useCellular
+          ? Pref.defaultAudioQaCellular
+          : Pref.defaultAudioQa;
+
+    // 正在请求播放地址时不要并发换流：queryVideoUrl 会用新的档位选流，
+    // 若它拿到的是 durl 等无法换流的源，_pendingNetworkReselect 也会被清掉
+    if (isQuerying) {
+      _pendingNetworkReselect = true;
+      return;
+    }
+    _applyNetworkScope();
+  }
+
+  void _applyNetworkScope() {
+    _pendingNetworkReselect = false;
+    // 可能是取流结束后补做的，其间播放器有可能已被叠加上来的页面接管
+    if (!identical(plPlayerController.sourceOwner, this)) return;
+    // durl / flv 兜底源没有可切换的流，等下次重新取流时再按新档位生效
+    if (data.dash?.video?.isNotEmpty != true) return;
+
+    _reselectQuality();
+    final qa = currentVideoQa.value;
+    if (qa == null) return;
+    if (plPlayerController.videoPlayerController == null) {
+      // 播放器尚未创建（如关闭了预加载且未起播）：只更新档位与取流地址，
+      // 等用户真正起播时自然用上新档位，不因链路变化提前建实例
+      _refreshSourceUrls(qa);
+      return;
+    }
+    updatePlayer(autoplay: plPlayerController.playerStatus.isPlaying);
   }
 
   Future<void>? _initPlayerIfNeeded(bool autoFullScreenFlag) {
@@ -933,6 +1051,7 @@ class VideoDetailController extends GetxController
     if (plPlayerController.videoPlayerController == null) {
       plPlayerController = PlPlayerController.ensureInstance();
     }
+    plPlayerController.sourceOwner = this;
     if (isFileSource) {
       await _loadLocalPlaybackMeta();
     }
@@ -1055,11 +1174,16 @@ class VideoDetailController extends GetxController
     bool reinitializePlayer = true,
     bool autoFullScreenFlag = false,
   }) async {
+    if (isClosed || isQuerying || _awaitingPageEntry) return;
+    // 首页卡片一镜到底：等页面入场动画接近完成再取流/初始化播放器。
+    // 等待期间要占住闸门，否则并发调用会各跑一遍 _queryVideoUrl。
+    _awaitingPageEntry = true;
+    final entered = await waitForVideoPageEntry(heroTag);
+    _awaitingPageEntry = false;
+    // 等待期间页面可能已关闭，或入场被打断（正在返回）
+    if (isClosed || !entered || isQuerying) return;
     if (isFileSource) {
       return _initPlayerIfNeeded(autoFullScreenFlag);
-    }
-    if (isQuerying) {
-      return;
     }
     isQuerying = true;
     try {
@@ -1076,8 +1200,14 @@ class VideoDetailController extends GetxController
     await _queryVideoUrl(fromReset, autoFullScreenFlag, reinitializePlayer);
     } finally {
       isQuerying = false;
+      // 取流期间链路发生过翻转：上面的选流可能已用旧档位跑完，这里补做一次
+      if (_pendingNetworkReselect) {
+        _applyNetworkScope();
+      }
     }
   }
+
+  bool _awaitingPageEntry = false;
 
   @pragma('vm:prefer-inline')
   Future<void> _queryVideoUrl(
@@ -1445,8 +1575,10 @@ class VideoDetailController extends GetxController
 
   // 设定字幕轨道
   Future<void> setSubtitle(int index) async {
+    // 换集/退出期间本方法里有多处 await，播放器随时可能已被销毁
+    if (isClosed || plPlayerController.playerDisposed) return;
     if (index <= 0) {
-      await plPlayerController.videoPlayerController?.setSubtitleTrack(.no());
+      await _setSubtitleTrack(.no());
       vttSubtitlesIndex.value = index;
       return;
     }
@@ -1460,7 +1592,7 @@ class VideoDetailController extends GetxController
     final subUri = await _resolveVttUri(index - 1);
     if (isClosed || subUri == null) return;
     final sub = subtitles[index - 1];
-    await plPlayerController.videoPlayerController?.setSubtitleTrack(
+    await _setSubtitleTrack(
       SubtitleTrack(subUri, sub.lanDoc, sub.lan, uri: true),
     );
     vttSubtitlesIndex.value = index;
@@ -1476,19 +1608,21 @@ class VideoDetailController extends GetxController
     // 守卫同规则:冲突时副字幕让位,即视为关闭副字幕。
     if (index <= 0 || index == vttSubtitlesIndex.value) {
       vttSecondarySubtitlesIndex.value = 0;
-      await player?.setSecondarySubtitleTrack(.no());
+      // TODO(ohos): cnoim fork 未实现 setSecondarySubtitleTrack，副字幕跳过
+      // await player?.setSecondarySubtitleTrack(.no());
       return;
     }
 
     if (player == null) return;
 
-    final subUri = await _resolveVttUri(index - 1);
-    if (isClosed || subUri == null) return;
-    final sub = subtitles[index - 1];
-    await player.setSecondarySubtitleTrack(
-      SubtitleTrack(subUri, sub.lanDoc, sub.lan, uri: true),
-    );
-    vttSecondarySubtitlesIndex.value = index;
+    // TODO(ohos): cnoim fork 未实现 setSecondarySubtitleTrack，副字幕跳过
+    // final subUri = await _resolveVttUri(index - 1);
+    // if (isClosed || subUri == null) return;
+    // final sub = subtitles[index - 1];
+    // await player.setSecondarySubtitleTrack(
+    //   SubtitleTrack(subUri, sub.lanDoc, sub.lan, uri: true),
+    // );
+    // vttSecondarySubtitlesIndex.value = index;
   }
 
   /// 取 subtitles[subIdx] 的 VTT 播放地址(本地文件路径或 memory:// 数据),
@@ -1504,6 +1638,16 @@ class VideoDetailController extends GetxController
       vttSubtitles[subIdx] = subtitle;
     }
     return subtitle.isData ? 'memory://${subtitle.id}' : subtitle.id;
+  }
+
+  /// 设置字幕轨道；播放器可能在 await 之后已被销毁
+  Future<void> _setSubtitleTrack(SubtitleTrack track) async {
+    if (plPlayerController.playerDisposed) return;
+    try {
+      await plPlayerController.videoPlayerController?.setSubtitleTrack(track);
+    } catch (e) {
+      if (kDebugMode) debugPrint('setSubtitleTrack failed: $e');
+    }
   }
 
   // interactive video
@@ -1716,6 +1860,11 @@ class VideoDetailController extends GetxController
   @override
   void onClose() {
     plPlayerController.onNeedsPlayerInit = null;
+    _networkScopeSub?.cancel();
+    _networkScopeSub = null;
+    if (identical(plPlayerController.sourceOwner, this)) {
+      plPlayerController.sourceOwner = null;
+    }
     if (isEnteringPip) {
       // 正在进入小窗，保留资源
       return;

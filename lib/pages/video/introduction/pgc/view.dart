@@ -1,4 +1,4 @@
-import 'dart:math';
+﻿import 'dart:math';
 
 import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/badge.dart';
@@ -121,7 +121,7 @@ class _PgcIntroPageState extends State<PgcIntroPage> {
           slivers: img.map((e) {
             return SliverToBoxAdapter(
               child: NetworkImgLayer(
-                type: .emote,
+                type: ImageType.emote,
                 src: e.url,
                 width: imgWidth,
                 height: imgWidth * e.aspectRatio,

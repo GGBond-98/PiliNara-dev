@@ -1,3 +1,4 @@
+import 'package:PiliPlus/pages/setting/models/experimental_settings.dart';
 import 'package:PiliPlus/pages/setting/models/extra_settings.dart';
 import 'package:PiliPlus/pages/setting/models/dynamics_settings.dart';
 import 'package:PiliPlus/pages/setting/models/model.dart';
@@ -15,6 +16,7 @@ enum SettingType {
   playSetting('播放器设置'),
   styleSetting('外观设置'),
   extraSetting('其它设置'),
+  experimentalSetting('鸿蒙特色功能（实验性）'),
   webdavSetting('WebDAV 设置'),
   about('关于'),
   ;
@@ -30,6 +32,7 @@ enum SettingType {
     .playSetting => playSettings,
     .styleSetting => styleSettings,
     .extraSetting => extraSettings,
+    .experimentalSetting => experimentalSettings,
     _ => throw UnimplementedError(),
   };
 }

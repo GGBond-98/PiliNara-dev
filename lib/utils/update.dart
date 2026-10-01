@@ -20,7 +20,12 @@ import 'package:material_ui/material_ui.dart';
 abstract final class Update {
   // 检查更新
   static Future<void> checkUpdate([bool isAuto = true]) async {
-    if (kDebugMode) return;
+    // if (kDebugMode) return;
+    // 获取到默认值，没有构建时间信息
+    if (BuildConfig.buildTime == 0) {
+      SmartDialog.showToast('未知Build Time，可前往源码仓库检查更新');
+      return;
+    }
     SmartDialog.dismiss();
     try {
       final res = await Request().get(
@@ -49,7 +54,12 @@ abstract final class Update {
       }
       final int latest =
           DateTime.parse(data['created_at']).millisecondsSinceEpoch ~/ 1000;
-      if (BuildConfig.buildTime >= latest) {
+      final latestTag = data['tag_name'];
+      final latestHash = (await Request().get(
+        'https://api.github.com/repos/dev4harmony/PiliPlus/git/refs/tags/$latestTag',
+      )).data['object']['sha'];
+      if (BuildConfig.buildTime >= latest ||
+          BuildConfig.commitHash == latestHash) {
         if (!isAuto) {
           SmartDialog.showToast('已是最新版本');
         }
@@ -85,7 +95,7 @@ abstract final class Update {
                       Text('${data['body']}'),
                       TextButton(
                         onPressed: () => PageUtils.launchURL(
-                          '${Constants.sourceCodeUrl}/commits/main',
+                          '${Constants.sourceCodeUrl}/commits/ohos', // 鸿蒙版ohos分支
                         ),
                         child: Text(
                           "点此查看完整更新(即commit)内容",

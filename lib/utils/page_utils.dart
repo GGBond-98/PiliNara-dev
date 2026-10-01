@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:PiliPlus/common/widgets/fractionally_sized_box.dart';
 import 'package:PiliPlus/common/widgets/image_viewer/gallery_viewer.dart';
 import 'package:PiliPlus/common/widgets/image_viewer/hero_dialog_route.dart';
+import 'package:PiliPlus/common/widgets/video_card/video_card_transition.dart';
 import 'package:PiliPlus/grpc/im.dart';
 import 'package:PiliPlus/http/dynamics.dart';
 import 'package:PiliPlus/http/loading_state.dart';
@@ -17,10 +18,9 @@ import 'package:PiliPlus/pages/common/publish/publish_route.dart';
 import 'package:PiliPlus/pages/contact/view.dart';
 import 'package:PiliPlus/pages/fav_panel/view.dart';
 import 'package:PiliPlus/pages/share/view.dart';
-import 'package:PiliPlus/utils/android/android_helper.dart';
 import 'package:PiliPlus/utils/app_scheme.dart';
 import 'package:PiliPlus/utils/extension/context_ext.dart';
-import 'package:PiliPlus/utils/extension/get_ext.dart';
+import 'package:PiliPlus/utils/extension/extension.dart';
 import 'package:PiliPlus/utils/extension/size_ext.dart';
 import 'package:PiliPlus/utils/extension/string_ext.dart';
 import 'package:PiliPlus/utils/feed_back.dart';
@@ -31,15 +31,16 @@ import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:PiliPlus/utils/url_utils.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:collection/collection.dart';
+import 'package:floating/floating.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 abstract final class PageUtils {
   static RelativeRect menuPosition(Offset offset) {
-    return .fromLTRB(offset.dx, offset.dy, offset.dx, 0);
+    return RelativeRect.fromLTRB(offset.dx, offset.dy, offset.dx, 0);
   }
 
   static Future<void> imageView({
@@ -155,11 +156,12 @@ abstract final class PageUtils {
       useSafeArea: true,
       isScrollControlled: true,
       constraints: BoxConstraints(
-        maxWidth: min(640, context.mediaQueryShortestSide),
+        maxWidth: min(640, ContextExtensions(context).mediaQueryShortestSide),
       ),
       builder: (BuildContext context) {
         final maxChildSize =
-            PlatformUtils.isMobile && !context.mediaQuerySize.isPortrait
+            PlatformUtils.isMobile &&
+                !ContextExtensions(context).mediaQuerySize.isPortrait
             ? 1.0
             : 0.7;
         return DraggableScrollableSheet(
@@ -187,38 +189,28 @@ abstract final class PageUtils {
     );
   }
 
-  static bool _fitsInAndroidRequirements(int width, int height) {
-    final aspectRatio = width / height;
-    const min = 1 / 2.39;
-    const max = 2.39;
-    return (min <= aspectRatio) && (aspectRatio <= max);
-  }
-
-  static void enterPip({
+  static Future<PiPStatus> enterPip({
     int? width,
     int? height,
-    bool autoEnter = false,
-    required bool isLive,
-    required bool isPlaying,
+    bool isAuto = false,
   }) {
-    if (width != null &&
-        height != null &&
-        !_fitsInAndroidRequirements(width, height)) {
-      if (height > width) {
-        width = 9;
-        height = 16;
-      } else {
-        width = 16;
-        height = 9;
-      }
+    if (width != null && height != null) {
+      Rational aspectRatio = Rational(width, height);
+      aspectRatio = aspectRatio.fitsInAndroidRequirements
+          ? aspectRatio
+          : height > width
+          ? const Rational.vertical()
+          : const Rational.landscape();
+      return Floating().enable(
+        isAuto
+            ? AutoEnable(aspectRatio: aspectRatio)
+            : EnableManual(aspectRatio: aspectRatio),
+      );
+    } else {
+      return Floating().enable(
+        isAuto ? const AutoEnable() : const EnableManual(),
+      );
     }
-    PiliAndroidHelper.enterPip(
-      width ?? 16,
-      height ?? 9,
-      autoEnter: autoEnter,
-      isLive: isLive,
-      isPlaying: isPlaying,
-    );
   }
 
   static Future<void> pushDynDetail(
@@ -411,6 +403,25 @@ abstract final class PageUtils {
     }
   }
 
+  static void onHorizontalPreviewState(
+    ScaffoldState state,
+    List<SourceModel> imgList,
+    int index,
+  ) {
+    state.showBottomSheet(
+      constraints: const BoxConstraints(),
+      (context) => GalleryViewer(
+        sources: imgList,
+        initIndex: index,
+        quality: GlobalData().imgQuality,
+      ),
+      enableDrag: false,
+      elevation: 0.0,
+      backgroundColor: Colors.transparent,
+      sheetAnimationStyle: AnimationStyle.noAnimation,
+    );
+  }
+
   static void inAppWebview(
     String url, {
     bool off = false,
@@ -418,12 +429,19 @@ abstract final class PageUtils {
     if (Pref.openInBrowser) {
       launchURL(url);
     } else {
-      Get.offOrToNamed(
-        '/webview',
-        parameters: {'url': url},
-        arguments: const {'inApp': true},
-        off: off,
-      );
+      if (off) {
+        Get.offNamed(
+          '/webview',
+          parameters: {'url': url},
+          arguments: {'inApp': true},
+        );
+      } else {
+        Get.toNamed(
+          '/webview',
+          parameters: {'url': url},
+          arguments: {'inApp': true},
+        );
+      }
     }
   }
 
@@ -432,7 +450,7 @@ abstract final class PageUtils {
     LaunchMode mode = LaunchMode.externalApplication,
   }) async {
     try {
-      final uri = Uri.parse(url);
+      final Uri uri = Uri.parse(url);
       if (!await launchUrl(uri, mode: mode)) {
         SmartDialog.showToast('Could not launch $url');
       }
@@ -467,7 +485,8 @@ abstract final class PageUtils {
     return Get.key.currentState!.push(
       PublishRoute(
         pageBuilder: (context, animation, secondaryAnimation) {
-          final isPortrait = context.isPortrait;
+          // 显式调用扩展，避免与 GetX 的同名 BuildContext 扩展产生歧义
+          final isPortrait = ContextExtensions(context).isPortrait;
           return SafeArea(
             child: CustomFractionallySizedBox(
               maxWidth: maxWidth,
@@ -483,7 +502,7 @@ abstract final class PageUtils {
         },
         transitionDuration: const Duration(milliseconds: 350),
         transitionBuilder: (context, animation, secondaryAnimation, child) {
-          final begin = context.isPortrait
+          final begin = ContextExtensions(context).isPortrait
               ? const Offset(0.0, 1.0)
               : const Offset(1.0, 0.0);
           return SlideTransition(
@@ -508,12 +527,11 @@ abstract final class PageUtils {
     if (roomId == null) {
       return;
     }
-    Get.offOrToNamed(
-      '/liveRoom',
-      arguments: roomId,
-      off: off,
-      preventDuplicates: off,
-    );
+    if (off) {
+      Get.offNamed('/liveRoom', arguments: roomId);
+    } else {
+      PageUtils.toDupNamed('/liveRoom', arguments: roomId);
+    }
   }
 
   static Future<void>? toVideoPage({
@@ -531,7 +549,9 @@ abstract final class PageUtils {
     bool off = false,
     bool isVertical = false,
     Dimension? dimension,
+    Object? heroTag,
   }) {
+    final tag = heroTag ?? Utils.makeHeroTag(cid ?? bvid ?? aid);
     final arguments = {
       'aid': aid ?? IdUtils.bv2av(bvid!),
       'bvid': bvid ?? IdUtils.av2bv(aid!),
@@ -544,10 +564,32 @@ abstract final class PageUtils {
       'progress': ?progress,
       'videoType': videoType,
       'isVertical': dimension?.isVertical ?? isVertical,
-      'heroTag': Utils.makeHeroTag(cid),
+      'heroTag': tag,
       ...?extraArguments,
     };
-    return PageUtils.toDupNamed('/videoV', arguments: arguments, off: off);
+    if (!hasPendingVideoCardTransition(tag)) {
+      if (off) {
+        return Get.offNamed(
+          '/videoV',
+          arguments: arguments,
+          preventDuplicates: false,
+        );
+      } else {
+        return Get.toNamed(
+          '/videoV',
+          arguments: arguments,
+          preventDuplicates: false,
+        );
+      }
+    }
+    // 由首页卡片触发：走「一镜到底」自定义转场路由
+    final pushed = pushVideoPageTransition(arguments: arguments, off: off);
+    if (pushed != null) return pushed;
+    return Get.toNamed(
+      '/videoV',
+      arguments: arguments,
+      preventDuplicates: false,
+    );
   }
 
   static final _pgcRegex = RegExp(r'(ep|ss)(\d+)');
@@ -748,17 +790,26 @@ abstract final class PageUtils {
     }
   }
 
-  @pragma('vm:prefer-inline')
-  static Future<T?>? toDupNamed<T>(
+  static void toDupNamed(
     String page, {
     dynamic arguments,
     Map<String, String>? parameters,
     bool off = false,
-  }) => Get.offOrToNamed(
-    page,
-    arguments: arguments,
-    parameters: parameters,
-    preventDuplicates: false,
-    off: off,
-  );
+  }) {
+    if (off) {
+      Get.offNamed(
+        page,
+        arguments: arguments,
+        parameters: parameters,
+        preventDuplicates: false,
+      );
+    } else {
+      Get.toNamed(
+        page,
+        arguments: arguments,
+        parameters: parameters,
+        preventDuplicates: false,
+      );
+    }
+  }
 }

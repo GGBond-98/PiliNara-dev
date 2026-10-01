@@ -301,21 +301,19 @@ class _SavePanelState extends State<SavePanel> {
       image.dispose();
       final pngBytes = byteData!.buffer.asUint8List();
       final picName =
-          "${Constants.appName}_${itemType}_${DateFormat('yyyyMMddHHmmss').format(DateTime.now())}";
+          "${Constants.appName}_${itemType}_${DateFormatUtils.only0_9.format(DateTime.now())}";
       if (isShare) {
         Get.back();
         SmartDialog.dismiss();
-        SharePlus.instance.share(
-          ShareParams(
-            files: [
-              XFile.fromData(
-                pngBytes,
-                name: picName,
-                mimeType: 'image/png',
-              ),
-            ],
-            sharePositionOrigin: await ShareUtils.sharePositionOrigin,
-          ),
+        Share.shareXFiles(
+          [
+            XFile.fromData(
+              pngBytes,
+              name: picName,
+              mimeType: 'image/png',
+            ),
+          ],
+          sharePositionOrigin: await ShareUtils.sharePositionOrigin,
         );
       } else {
         final result = await ImageUtils.saveByteImg(
@@ -355,7 +353,8 @@ class _SavePanelState extends State<SavePanel> {
             padding: const .symmetric(horizontal: 12),
             child: RepaintBoundary(
               key: boundaryKey,
-              child: DecoratedBox(
+              child: Container(
+                clipBehavior: .hardEdge,
                 decoration: BoxDecoration(
                   color: colorScheme.surface,
                   borderRadius: const .all(.circular(12)),

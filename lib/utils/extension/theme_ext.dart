@@ -34,8 +34,8 @@ extension ColorExtension on Color {
   }
 
   ColorScheme asColorSchemeSeed([
-    FlexSchemeVariant variant = .material,
-    Brightness brightness = .light,
+    FlexSchemeVariant variant = FlexSchemeVariant.material,
+    Brightness brightness = Brightness.light,
   ]) => SeedColorScheme.fromSeeds(
     primaryKey: this,
     variant: variant,

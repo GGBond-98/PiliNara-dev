@@ -6,8 +6,7 @@ import 'package:PiliPlus/common/widgets/flutter/popup_menu.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/loading_widget.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
-import 'package:PiliPlus/common/widgets/scroll_physics.dart' show tabBarView;
-import 'package:PiliPlus/common/widgets/view_insets_safe_area.dart';
+import 'package:PiliPlus/common/widgets/scroll_physics.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/pages/login/controller.dart';
 import 'package:PiliPlus/pages/login/web_login_view.dart';
@@ -263,40 +262,60 @@ class _LoginPageState extends State<LoginPage> {
         const SizedBox(height: 20),
         const Text('使用账号密码登录'),
         const SizedBox(height: 10),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          child: TextField(
-            controller: _loginPageCtr.usernameTextController,
-            inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r"\s"))],
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.account_box),
-              border: const UnderlineInputBorder(),
-              labelText: '账号',
-              hintText: '邮箱/手机号',
-              suffixIcon: IconButton(
-                onPressed: _loginPageCtr.usernameTextController.clear,
-                icon: const Icon(Icons.clear),
+        // AutofillGroup：账号+密码组成一组，供系统密码保险箱识别、回填与保存
+        AutofillGroup(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
+                ),
+                child: TextField(
+                  controller: _loginPageCtr.usernameTextController,
+                  autofillHints: const [AutofillHints.username],
+                  textInputAction: TextInputAction.next,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.deny(RegExp(r"\s")),
+                  ],
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.account_box),
+                    border: const UnderlineInputBorder(),
+                    labelText: '账号',
+                    hintText: '邮箱/手机号',
+                    suffixIcon: IconButton(
+                      onPressed: _loginPageCtr.usernameTextController.clear,
+                      icon: const Icon(Icons.clear),
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          child: TextField(
-            obscureText: !showPassword,
-            keyboardType: TextInputType.visiblePassword,
-            inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r"\s"))],
-            controller: _loginPageCtr.passwordTextController,
-            autofillHints: const [AutofillHints.password],
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.password),
-              border: const UnderlineInputBorder(),
-              labelText: '密码',
-              suffixIcon: IconButton(
-                onPressed: _loginPageCtr.passwordTextController.clear,
-                icon: const Icon(Icons.clear),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
+                ),
+                child: TextField(
+                  obscureText: !showPassword,
+                  keyboardType: TextInputType.visiblePassword,
+                  textInputAction: TextInputAction.done,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.deny(RegExp(r"\s")),
+                  ],
+                  controller: _loginPageCtr.passwordTextController,
+                  autofillHints: const [AutofillHints.password],
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.password),
+                    border: const UnderlineInputBorder(),
+                    labelText: '密码',
+                    suffixIcon: IconButton(
+                      onPressed: _loginPageCtr.passwordTextController.clear,
+                      icon: const Icon(Icons.clear),
+                    ),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ),
         Row(
@@ -342,7 +361,8 @@ class _LoginPageState extends State<LoginPage> {
                           ..toNamed(
                             '/webview',
                             parameters: {
-                              'url': 'https://passport.bilibili.com/h5-app/passport/login/findPassword',
+                              'url':
+                                  'https://passport.bilibili.com/h5-app/passport/login/findPassword',
                               'type': 'url',
                               'pageTitle': '忘记密码',
                             },
@@ -362,7 +382,8 @@ class _LoginPageState extends State<LoginPage> {
                           ..toNamed(
                             '/webview',
                             parameters: {
-                              'url': 'https://passport.bilibili.com/pc/passport/findPassword',
+                              'url':
+                                  'https://passport.bilibili.com/pc/passport/findPassword',
                               'type': 'url',
                               'pageTitle': '忘记密码',
                               'uaType': 'pc',
@@ -612,41 +633,34 @@ class _LoginPageState extends State<LoginPage> {
               ),
           ],
         ),
+        bottom: !isLandscape
+            ? TabBar(
+                tabs: const [
+                  Tab(icon: Icon(Icons.password), text: '密码'),
+                  Tab(icon: Icon(Icons.sms_outlined), text: '短信'),
+                  Tab(icon: Icon(Icons.qr_code), text: '扫码'),
+                  Tab(icon: Icon(Icons.cookie_outlined), text: 'Cookie'),
+                ],
+                controller: _loginPageCtr.tabController,
+              )
+            : null,
       ),
-      body: Column(
-        children: [
-          if (!isLandscape)
-            TabBar(
-              tabs: const [
-                Tab(icon: Icon(Icons.password), text: '密码'),
-                Tab(icon: Icon(Icons.sms_outlined), text: '短信'),
-                Tab(icon: Icon(Icons.qr_code), text: '扫码'),
-                Tab(icon: Icon(Icons.cookie_outlined), text: 'Cookie'),
-              ],
-              controller: _loginPageCtr.tabController,
-            ),
-          Expanded(
-            child: NotificationListener<ScrollStartNotification>(
-              onNotification: (notification) {
-                if (notification.metrics.axis == Axis.horizontal) {
-                  FocusScope.of(context).unfocus();
-                }
-                return false;
-              },
-              child: ViewInsetsSafeArea(
-                child: tabBarView(
-                  controller: _loginPageCtr.tabController,
-                  children: [
-                    tabViewOuter(loginByPassword(theme)),
-                    tabViewOuter(loginBySmS(theme)),
-                    tabViewOuter(loginByQRCode(theme)),
-                    tabViewOuter(loginByCookie(theme)),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
+      body: NotificationListener<ScrollStartNotification>(
+        onNotification: (notification) {
+          if (notification.metrics.axis == Axis.horizontal) {
+            FocusScope.of(context).unfocus();
+          }
+          return false;
+        },
+        child: tabBarView(
+          controller: _loginPageCtr.tabController,
+          children: [
+            tabViewOuter(loginByPassword(theme)),
+            tabViewOuter(loginBySmS(theme)),
+            tabViewOuter(loginByQRCode(theme)),
+            tabViewOuter(loginByCookie(theme)),
+          ],
+        ),
       ),
     );
   }

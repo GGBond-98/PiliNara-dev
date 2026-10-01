@@ -7,15 +7,15 @@ import 'package:PiliPlus/utils/app_scheme.dart';
 import 'package:PiliPlus/utils/extension/num_ext.dart';
 import 'package:PiliPlus/utils/image_utils.dart';
 import 'package:cached_network_image_ce/cached_network_image.dart';
-import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:get/get.dart';
 
 class ArticleOpus extends StatelessWidget {
   const ArticleOpus({
     super.key,
-    required this._ops,
+    required List<ArticleOps>? ops,
     required this.maxWidth,
-  });
+  }) : _ops = ops;
 
   final List<ArticleOps>? _ops;
   final double maxWidth;

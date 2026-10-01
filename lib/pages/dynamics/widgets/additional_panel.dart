@@ -4,12 +4,13 @@ import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/common/widgets/selection_text.dart';
 import 'package:PiliPlus/http/dynamics.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/models/common/image_type.dart';
 import 'package:PiliPlus/models/dynamics/result.dart';
 import 'package:PiliPlus/pages/dynamics/widgets/vote.dart';
 import 'package:PiliPlus/utils/app_scheme.dart';
 import 'package:PiliPlus/utils/num_utils.dart';
-import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:get/get.dart';
 
 Widget? addWidget(
   BuildContext context, {
@@ -568,17 +569,17 @@ Widget? addWidget(
                 padding: padding,
                 child: Column(
                   spacing: 5,
-                  mainAxisSize: .min,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     NetworkImgLayer(
-                      type: .emote,
+                      type: ImageType.emote,
                       width: 30,
                       height: 30,
                       src: team.pic,
                     ),
                     Text(
                       maxLines: 1,
-                      overflow: .ellipsis,
+                      overflow: TextOverflow.ellipsis,
                       team.name!,
                       style: const TextStyle(fontSize: 13),
                     ),
@@ -624,7 +625,7 @@ Widget? addWidget(
                   teamItem(
                     content.matchInfo!.leftTeam!,
                     Alignment.centerRight,
-                    const .only(right: 16),
+                    const EdgeInsets.only(right: 16),
                   ),
                 Column(
                   children: [
@@ -654,7 +655,7 @@ Widget? addWidget(
                   teamItem(
                     content.matchInfo!.rightTeam!,
                     Alignment.centerLeft,
-                    const .only(left: 16),
+                    const EdgeInsets.only(left: 16),
                   ),
                 if (content.button case final button?)
                   FilledButton.tonal(
@@ -692,7 +693,7 @@ Widget? addWidget(
     }
   } catch (e) {
     return Padding(
-      padding: const .all(12),
+      padding: const EdgeInsets.all(12),
       child: SelectionText(
         '''
 additional panel error

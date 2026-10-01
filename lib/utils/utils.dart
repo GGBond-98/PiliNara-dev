@@ -9,9 +9,10 @@ import 'package:flutter/services.dart'
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
 abstract final class Utils {
-  static final random = Random();
-
+  // 鸿蒙/安卓原生通道（上游已改用 JNI，这里保留给 ohos 适配层）
   static const channel = MethodChannel(Constants.appName);
+
+  static final random = Random();
 
   static const jsonEncoder = JsonEncoder.withIndent('    ');
 

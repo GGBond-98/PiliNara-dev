@@ -1,10 +1,10 @@
 import 'package:PiliPlus/common/widgets/gesture/tap_gesture_recognizer.dart';
 import 'package:PiliPlus/models/dynamics/result.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:material_ui/material_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get_core/src/get_main.dart';
 import 'package:get/get_navigation/src/extension_navigation.dart';
-import 'package:material_ui/material_ui.dart';
 
 Widget dynInteraction({
   required ThemeData theme,
@@ -15,16 +15,16 @@ Widget dynInteraction({
     if (items.length > 1) {
       child = Column(
         spacing: 3,
-        mainAxisSize: .min,
-        crossAxisAlignment: .start,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: items.map((e) => _item(theme, e)).toList(),
       );
     } else {
       child = _item(theme, items.single);
     }
     return Container(
-      padding: const .only(left: 8),
-      margin: const .only(left: 12, right: 12, top: 6),
+      padding: const EdgeInsets.only(left: 8),
+      margin: const EdgeInsets.only(left: 12, right: 12, top: 6),
       decoration: BoxDecoration(
         border: Border(
           left: BorderSide(
@@ -56,9 +56,9 @@ Widget _item(
     TextSpan(
       children: [
         WidgetSpan(
-          alignment: .middle,
+          alignment: PlaceholderAlignment.middle,
           child: Padding(
-            padding: const .only(right: 6),
+            padding: const EdgeInsets.only(right: 6),
             child: Icon(
               size: 13,
               color: theme.colorScheme.outline,

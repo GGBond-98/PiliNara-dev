@@ -29,8 +29,10 @@ class PgcCardVTimeline extends StatelessWidget {
         borderRadius: Style.mdRadius,
         onLongPress: onLongPress,
         onSecondaryTap: PlatformUtils.isMobile ? null : onLongPress,
-        onTap: () =>
-            PageUtils.viewPgc(seasonId: item.seasonId, epId: item.episodeId),
+        onTap: () => PageUtils.viewPgc(
+          seasonId: item.seasonId,
+          epId: item.episodeId,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

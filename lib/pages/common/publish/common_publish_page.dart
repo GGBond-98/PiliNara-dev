@@ -6,8 +6,8 @@ import 'package:PiliPlus/models/common/publish_panel_type.dart';
 import 'package:PiliPlus/utils/extension/context_ext.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:chat_bottom_container/chat_bottom_container.dart';
-import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:get/get.dart';
 
 abstract class CommonPublishPage<T> extends StatefulWidget {
   const CommonPublishPage({
@@ -100,7 +100,7 @@ abstract class CommonPublishPageState<T extends CommonPublishPage>
   }
 
   void _requestFocus({Duration duration = const Duration(microseconds: 200)}) {
-    Future.delayed(duration, _safeRequestFocus);
+    Timer(duration, _safeRequestFocus);
   }
 
   @override
@@ -110,6 +110,8 @@ abstract class CommonPublishPageState<T extends CommonPublishPage>
         _paused = false;
         final panelType = this.panelType.value;
         if (panelType == .keyboard || panelType == .none) {
+          // 鸿蒙适配：恢复被 keepChatPanel 冻结的面板高度，避免回前台后面板错位
+          controller.restoreChatPanel();
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (focusNode.hasFocus) {
               focusNode.unfocus();
@@ -122,6 +124,8 @@ abstract class CommonPublishPageState<T extends CommonPublishPage>
       }
     } else if (state == .paused) {
       _paused = true;
+      // 鸿蒙适配：退到后台时冻结面板，避免键盘收起导致面板高度被重置
+      controller.keepChatPanel();
       if (focusNode.hasFocus) {
         focusNode.unfocus();
       }
@@ -166,6 +170,7 @@ abstract class CommonPublishPageState<T extends CommonPublishPage>
 
   Future<void> hidePanel([_]) async {
     if (focusNode.hasFocus) {
+      // TODO(ohos): 上游用 Future.pause（Dart 3.13+），鸿蒙 Dart SDK(3.12) 暂不支持，先用 Future.delayed 等价替换
       await Future.delayed(const Duration(milliseconds: 100));
       if (!mounted) return;
       focusNode.unfocus();
@@ -186,7 +191,7 @@ abstract class CommonPublishPageState<T extends CommonPublishPage>
   }
 
   Widget buildEmojiPickerPanel() {
-    double height = context.isTablet ? 300 : 170;
+    double height = ContextExtensions(context).isTablet ? 300 : 170;
     final keyboardHeight = controller.keyboardHeight;
     if (keyboardHeight != 0) {
       height = max(height, keyboardHeight);

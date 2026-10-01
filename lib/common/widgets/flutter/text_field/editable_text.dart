@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// ignore_for_file: prefer_initializing_formals, uri_does_not_exist_in_doc_import
+// ignore_for_file: uri_does_not_exist_in_doc_import
 
 /// @docImport 'package:flutter/cupertino.dart';
 /// @docImport 'package:flutter/material.dart';
@@ -26,19 +26,21 @@ import 'package:PiliPlus/common/widgets/flutter/text_field/editable.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/spell_check.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/text_selection.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
+import 'package:PiliPlus/utils/share_utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/rendering.dart'
-    hide RenderEditable, VerticalCaretMovementRun;
-import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart';
-import 'package:material_ui/material_ui.dart'
+import 'package:flutter/material.dart'
     hide
         EditableText,
         EditableTextState,
         SpellCheckConfiguration,
         TextSelectionGestureDetectorBuilder,
         TextSelectionOverlay;
+import 'package:flutter/rendering.dart'
+    hide RenderEditable, VerticalCaretMovementRun;
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
+import 'package:os_type/os_type.dart';
 
 /// Signature for a widget builder that builds a context menu for the given
 /// [EditableTextState].
@@ -47,18 +49,13 @@ import 'package:material_ui/material_ui.dart'
 ///
 ///  * [SelectableRegionContextMenuBuilder], which performs the same role for
 ///    [SelectableRegion].
-typedef EditableTextContextMenuBuilder = Widget Function(
-  BuildContext context,
-  EditableTextState editableTextState,
-);
+typedef EditableTextContextMenuBuilder =
+    Widget Function(BuildContext context, EditableTextState editableTextState);
 
 // Signature for a function that determines the target location of the given
 // [TextPosition] after applying the given [TextBoundary].
-typedef _ApplyTextBoundary = TextPosition Function(
-  TextPosition,
-  bool,
-  TextBoundary,
-);
+typedef _ApplyTextBoundary =
+    TextPosition Function(TextPosition, bool, TextBoundary);
 
 // The time it takes for the cursor to fade from fully opaque to fully
 // transparent and vice versa. A full cursor blink, from transparent to opaque
@@ -400,7 +397,7 @@ class _DiscreteKeyFrameSimulation extends Simulation {
 /// ### Customizing User Input Accessibility Announcements
 ///
 /// To customize user input accessibility announcements triggered by text
-/// changes, use [SemanticsService.sendAnnouncement] to make the desired
+/// changes, use [SemanticsService.announce] to make the desired
 /// accessibility announcement.
 ///
 /// On iOS, the on-screen keyboard may announce the most recent input
@@ -531,7 +528,6 @@ class EditableText extends StatefulWidget {
     this.spellCheckConfiguration,
     this.magnifierConfiguration = TextMagnifierConfiguration.disabled,
     this.hintLocales,
-    this.enableInlinePrediction,
   }) : assert(obscuringCharacter.length == 1),
        autocorrect =
            autocorrect ?? _inferAutocorrect(autofillHints: autofillHints),
@@ -1673,11 +1669,6 @@ class EditableText extends StatefulWidget {
   /// Specifies the [SpellCheckService] used to spell check text input and the
   /// [TextStyle] used to style text with misspelled words.
   ///
-  /// Spell check is disabled for password input, including when [obscureText]
-  /// is true, [keyboardType] is [TextInputType.visiblePassword], or
-  /// [autofillHints] contains [AutofillHints.password] or
-  /// [AutofillHints.newPassword].
-  ///
   /// If the [SpellCheckService] is left null, spell check is disabled by
   /// default unless the [DefaultSpellCheckService] is supported, in which case
   /// it is used. It is currently supported only on Android and iOS.
@@ -1694,9 +1685,6 @@ class EditableText extends StatefulWidget {
 
   /// {@macro flutter.services.TextInputConfiguration.hintLocales}
   final List<Locale>? hintLocales;
-
-  /// {@macro flutter.services.TextInputConfiguration.enableInlinePrediction}
-  final bool? enableInlinePrediction;
 
   /// The default value for [selectionHeightStyle].
   ///
@@ -1727,7 +1715,7 @@ class EditableText extends StatefulWidget {
     //   }
     //   return ui.BoxWidthStyle.tight;
     // }
-    return ui.BoxWidthStyle.tight;
+    return ui.BoxWidthStyle.max;
   }
 
   /// The default value for [stylusHandwritingEnabled].
@@ -1748,6 +1736,7 @@ class EditableText extends StatefulWidget {
       TargetPlatform.linux => true,
       TargetPlatform.macOS => true,
       TargetPlatform.windows => true,
+      _ => PlatformUtils.isDesktop,
     };
   }
 
@@ -1769,15 +1758,15 @@ class EditableText extends StatefulWidget {
   /// * [AdaptiveTextSelectionToolbar.getAdaptiveButtons], which builds the button
   ///   Widgets for the current platform given [ContextMenuButtonItem]s.
   static List<ContextMenuButtonItem> getEditableButtonItems({
-    required ClipboardStatus? clipboardStatus,
-    required VoidCallback? onCopy,
-    required VoidCallback? onCut,
-    required VoidCallback? onPaste,
-    required VoidCallback? onSelectAll,
-    required VoidCallback? onLookUp,
-    required VoidCallback? onSearchWeb,
-    required VoidCallback? onShare,
-    required VoidCallback? onLiveTextInput,
+    required final ClipboardStatus? clipboardStatus,
+    required final VoidCallback? onCopy,
+    required final VoidCallback? onCut,
+    required final VoidCallback? onPaste,
+    required final VoidCallback? onSelectAll,
+    required final VoidCallback? onLookUp,
+    required final VoidCallback? onSearchWeb,
+    required final VoidCallback? onShare,
+    required final VoidCallback? onLiveTextInput,
   }) {
     final resultButtonItem = <ContextMenuButtonItem>[];
 
@@ -1855,7 +1844,16 @@ class EditableText extends StatefulWidget {
     }
 
     switch (defaultTargetPlatform) {
-      case TargetPlatform.iOS:
+      // ↓↓↓ 适配flutter 3.32.4-ohos-0.0.1
+      // case TargetPlatform.iOS:
+      // case TargetPlatform.macOS:
+      // case TargetPlatform.android:
+      // case TargetPlatform.fuchsia:
+      case TargetPlatform.linux:
+      case TargetPlatform.windows:
+      case TargetPlatform.macOS:
+        break;
+      default:
         // username, password and newPassword are password related hint.
         // newUsername is not supported on iOS.
         final bool passwordRelatedHint = autofillHints.any(
@@ -1869,12 +1867,7 @@ class EditableText extends StatefulWidget {
           // Set autocorrect to false to prevent password bar from flashing.
           return false;
         }
-      case TargetPlatform.macOS:
-      case TargetPlatform.android:
-      case TargetPlatform.fuchsia:
-      case TargetPlatform.linux:
-      case TargetPlatform.windows:
-        break;
+      // ↑↑↑ 适配flutter 3.32.4-ohos-0.0.1
     }
 
     return true;
@@ -1946,10 +1939,7 @@ class EditableText extends StatefulWidget {
           if (keyboardType != null) {
             return keyboardType;
           }
-        case TargetPlatform.android:
-        case TargetPlatform.fuchsia:
-        case TargetPlatform.linux:
-        case TargetPlatform.windows:
+        case _:
           break;
       }
     }
@@ -2172,13 +2162,6 @@ class EditableText extends StatefulWidget {
           'enableIMEPersonalizedLearning',
           enableIMEPersonalizedLearning,
           defaultValue: true,
-        ),
-      )
-      ..add(
-        DiagnosticsProperty<bool?>(
-          'enableInlinePrediction',
-          enableInlinePrediction,
-          defaultValue: null,
         ),
       )
       ..add(
@@ -2420,18 +2403,22 @@ class EditableTextState extends State<EditableText>
     }
 
     switch (defaultTargetPlatform) {
-      case TargetPlatform.macOS:
-        return false;
-      case TargetPlatform.iOS:
-        return textEditingValue.text.isNotEmpty &&
-            textEditingValue.selection.isCollapsed;
-      case TargetPlatform.android:
-      case TargetPlatform.fuchsia:
+      // ↓↓↓ 适配flutter 3.32.4-ohos-0.0.1
+      // case TargetPlatform.iOS:
+      // case TargetPlatform.macOS:
+      // case TargetPlatform.android:
+      // case TargetPlatform.fuchsia:
       case TargetPlatform.linux:
       case TargetPlatform.windows:
+      case TargetPlatform.macOS:
         return textEditingValue.text.isNotEmpty &&
             !(textEditingValue.selection.start == 0 &&
                 textEditingValue.selection.end == textEditingValue.text.length);
+      default:
+        return textEditingValue.text.isNotEmpty &&
+            !(textEditingValue.selection.start == 0 &&
+                textEditingValue.selection.end == textEditingValue.text.length);
+      // ↑↑↑ 适配flutter 3.32.4-ohos-0.0.1
     }
   }
 
@@ -2461,19 +2448,23 @@ class EditableTextState extends State<EditableText>
   @override
   bool get shareEnabled {
     switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-      case TargetPlatform.iOS:
+      // ↓↓↓ 适配flutter 3.32.4-ohos-0.0.1
+      // case TargetPlatform.iOS:
+      // case TargetPlatform.android:
+      // case TargetPlatform.macOS:
+      // case TargetPlatform.fuchsia:
+      case TargetPlatform.linux:
+      case TargetPlatform.windows:
+      case TargetPlatform.macOS:
+        return false;
+      default:
         return !widget.obscureText &&
             !textEditingValue.selection.isCollapsed &&
             textEditingValue.selection
                     .textInside(textEditingValue.text)
                     .trim() !=
                 '';
-      case TargetPlatform.macOS:
-      case TargetPlatform.fuchsia:
-      case TargetPlatform.linux:
-      case TargetPlatform.windows:
-        return false;
+      // ↑↑↑ 适配flutter 3.32.4-ohos-0.0.1
     }
   }
 
@@ -2516,21 +2507,22 @@ class EditableTextState extends State<EditableText>
     final String text =
         widget.controller.getSelectionText(selection) ??
         selection.textInside(textEditingValue.text);
-    Clipboard.setData(
-      ClipboardData(text: text),
-    ).catchError(_reportClipboardError('while copying selection to clipboard'));
+    Clipboard.setData(ClipboardData(text: text));
     if (cause == SelectionChangedCause.toolbar) {
       bringIntoView(textEditingValue.selection.extent);
       hideToolbar(false);
 
       switch (defaultTargetPlatform) {
-        case TargetPlatform.iOS:
-        case TargetPlatform.macOS:
+        // ↓↓↓ 适配flutter 3.32.4-ohos-0.0.1
+        // case TargetPlatform.iOS:
+        // case TargetPlatform.macOS:
+        // case TargetPlatform.android:
+        // case TargetPlatform.fuchsia:
         case TargetPlatform.linux:
         case TargetPlatform.windows:
+        case TargetPlatform.macOS:
           break;
-        case TargetPlatform.android:
-        case TargetPlatform.fuchsia:
+        default:
           // Collapse the selection and hide the toolbar and handles.
           userUpdateTextEditingValue(
             TextEditingValue(
@@ -2541,6 +2533,7 @@ class EditableTextState extends State<EditableText>
             ),
             SelectionChangedCause.toolbar,
           );
+        // ↑↑↑ 适配flutter 3.32.4-ohos-0.0.1
       }
     }
     clipboardStatus.update();
@@ -2560,9 +2553,7 @@ class EditableTextState extends State<EditableText>
     final String text =
         widget.controller.getSelectionText(selection) ??
         selection.textInside(textEditingValue.text);
-    Clipboard.setData(
-      ClipboardData(text: text),
-    ).catchError(_reportClipboardError('while cutting selection to clipboard'));
+    Clipboard.setData(ClipboardData(text: text));
     _replaceText(ReplaceTextIntent(textEditingValue, '', selection, cause));
     if (cause == SelectionChangedCause.toolbar) {
       // Schedule a call to bringIntoView() after renderEditable updates.
@@ -2574,19 +2565,6 @@ class EditableTextState extends State<EditableText>
       hideToolbar();
     }
     clipboardStatus.update();
-  }
-
-  void Function(Object, StackTrace) _reportClipboardError(String context) {
-    return (Object exception, StackTrace stack) {
-      FlutterError.reportError(
-        FlutterErrorDetails(
-          exception: exception,
-          stack: stack,
-          library: 'widgets library',
-          context: ErrorDescription(context),
-        ),
-      );
-    };
   }
 
   bool get _allowPaste {
@@ -2620,10 +2598,6 @@ class EditableTextState extends State<EditableText>
       selection.baseOffset,
       selection.extentOffset,
     );
-    final TextEditingValue collapsedTextEditingValue = textEditingValue
-        .copyWith(selection: .collapsed(offset: lastSelectionIndex));
-    final newValue = collapsedTextEditingValue.replaced(selection, text);
-
     // bggRGjQaUbCoE _pasteText
     widget.controller.syncRichText(
       selection.isCollapsed
@@ -2631,18 +2605,22 @@ class EditableTextState extends State<EditableText>
               oldText: textEditingValue.text,
               textInserted: text,
               insertionOffset: selection.baseOffset,
-              selection: newValue.selection,
-              composing: newValue.composing,
+              selection: TextSelection.collapsed(offset: lastSelectionIndex),
+              composing: TextRange.empty,
             )
           : TextEditingDeltaReplacement(
               oldText: textEditingValue.text,
               replacementText: text,
               replacedRange: selection,
-              selection: newValue.selection,
-              composing: newValue.composing,
+              selection: TextSelection.collapsed(offset: lastSelectionIndex),
+              composing: TextRange.empty,
             ),
     );
-
+    final newValue = _value.copyWith(
+      text: widget.controller.plainText,
+      selection: widget.controller.newSelection,
+      composing: TextRange.empty,
+    );
     userUpdateTextEditingValue(newValue, cause);
     if (cause == SelectionChangedCause.toolbar) {
       // Schedule a call to bringIntoView() after renderEditable updates.
@@ -2690,24 +2668,34 @@ class EditableTextState extends State<EditableText>
 
     if (cause == SelectionChangedCause.toolbar) {
       switch (defaultTargetPlatform) {
-        case TargetPlatform.android:
-        case TargetPlatform.iOS:
-        case TargetPlatform.fuchsia:
-          break;
-        case TargetPlatform.macOS:
+        // ↓↓↓ 适配flutter 3.32.4-ohos-0.0.1
+        // case TargetPlatform.android:
+        // case TargetPlatform.iOS:
+        // case TargetPlatform.fuchsia:
+        // case TargetPlatform.macOS:
         case TargetPlatform.linux:
         case TargetPlatform.windows:
+        case TargetPlatform.macOS:
           hideToolbar();
+        default:
+          break;
+        // ↑↑↑ 适配flutter 3.32.4-ohos-0.0.1
       }
       switch (defaultTargetPlatform) {
-        case TargetPlatform.android:
-        case TargetPlatform.fuchsia:
+        // ↓↓↓ 适配flutter 3.32.4-ohos-0.0.1
+        // case TargetPlatform.android:
+        // case TargetPlatform.fuchsia:
+        // case TargetPlatform.linux:
+        // case TargetPlatform.windows:
+        // case TargetPlatform.macOS:
+        // case TargetPlatform.iOS:
         case TargetPlatform.linux:
         case TargetPlatform.windows:
-          bringIntoView(textEditingValue.selection.extent);
         case TargetPlatform.macOS:
-        case TargetPlatform.iOS:
           break;
+        default:
+          bringIntoView(textEditingValue.selection.extent);
+        // ↑↑↑ 适配flutter 3.32.4-ohos-0.0.1
       }
     }
   }
@@ -2768,6 +2756,11 @@ class EditableTextState extends State<EditableText>
       textEditingValue.text,
     );
     if (text.isNotEmpty) {
+      // ohos未实现Share.invoke，改用ShareUtils分享。
+      if (OS.isHarmony) {
+        ShareUtils.shareText(text);
+        return;
+      }
       await SystemChannels.platform.invokeMethod('Share.invoke', text);
     }
   }
@@ -2777,19 +2770,7 @@ class EditableTextState extends State<EditableText>
       return;
     }
     if (_hasInputConnection) {
-      LiveText.startLiveTextInput().then(
-        (_) {},
-        onError: (Object error, StackTrace stack) {
-          FlutterError.reportError(
-            FlutterErrorDetails(
-              exception: error,
-              stack: stack,
-              library: 'widgets library',
-              context: ErrorDescription('while starting Live Text input'),
-            ),
-          );
-        },
-      );
+      LiveText.startLiveTextInput();
     }
     if (cause == SelectionChangedCause.toolbar) {
       hideToolbar();
@@ -2839,19 +2820,11 @@ class EditableTextState extends State<EditableText>
   /// If spell check is enabled, this will try to infer a value for
   /// the [SpellCheckService] if left unspecified.
   static SpellCheckConfiguration _inferSpellCheckConfiguration(
-    SpellCheckConfiguration? configuration, {
-    required bool obscureText,
-    required TextInputType keyboardType,
-    required Iterable<String>? autofillHints,
-  }) {
+    SpellCheckConfiguration? configuration,
+  ) {
     final SpellCheckService? spellCheckService =
         configuration?.spellCheckService;
     final bool spellCheckAutomaticallyDisabled =
-        _isPasswordInput(
-          obscureText: obscureText,
-          keyboardType: keyboardType,
-          autofillHints: autofillHints,
-        ) ||
         configuration == null ||
         configuration == const SpellCheckConfiguration.disabled();
     final bool spellCheckServiceIsConfigured =
@@ -2862,8 +2835,8 @@ class EditableTextState extends State<EditableText>
             .nativeSpellCheckServiceDefined;
     if (spellCheckAutomaticallyDisabled || !spellCheckServiceIsConfigured) {
       // Only enable spell check if a non-disabled configuration is provided
-      // for non-password input and, if that configuration does not specify a
-      // spell check service, a native spell checker must be supported.
+      // and if that configuration does not specify a spell check service,
+      // a native spell checker must be supported.
       assert(() {
         if (!spellCheckAutomaticallyDisabled &&
             !spellCheckServiceIsConfigured) {
@@ -2889,21 +2862,6 @@ class EditableTextState extends State<EditableText>
     return configuration.copyWith(
       spellCheckService: spellCheckService ?? DefaultSpellCheckService(),
     );
-  }
-
-  static bool _isPasswordInput({
-    required bool obscureText,
-    required TextInputType keyboardType,
-    required Iterable<String>? autofillHints,
-  }) {
-    return obscureText ||
-        keyboardType == TextInputType.visiblePassword ||
-        (autofillHints?.any(
-              (String hint) =>
-                  hint == AutofillHints.password ||
-                  hint == AutofillHints.newPassword,
-            ) ??
-            false);
   }
 
   /// Returns the [ContextMenuButtonItem]s for the given [ToolbarOptions].
@@ -3132,9 +3090,6 @@ class EditableTextState extends State<EditableText>
     _cursorVisibilityNotifier.value = widget.showCursor;
     _spellCheckConfiguration = _inferSpellCheckConfiguration(
       widget.spellCheckConfiguration,
-      obscureText: widget.obscureText,
-      keyboardType: widget.keyboardType,
-      autofillHints: widget.autofillHints,
     );
     _appLifecycleListener = AppLifecycleListener(onResume: _onResume);
     _initProcessTextActions();
@@ -3210,14 +3165,6 @@ class EditableTextState extends State<EditableText>
           _effectiveAutofillClient.textInputConfiguration,
         );
       }
-      // The style may have changed due to dependency changes
-      // (e.g. MediaQuery.boldTextOf, MediaQuery.textScalerOf, etc.).
-      SchedulerBinding.instance.addPostFrameCallback((Duration _) {
-        if (!mounted || !_hasInputConnection) {
-          return;
-        }
-        _textInputConnection!.updateStyle(_getTextInputStyle(context));
-      }, debugLabel: 'EditableText.updateStyle');
     }
 
     if (defaultTargetPlatform != TargetPlatform.iOS &&
@@ -3266,31 +3213,8 @@ class EditableTextState extends State<EditableText>
       _updateRemoteEditingValueIfNeeded();
     }
 
-    // If only the identity of the context menu builder closure changed (e.g.
-    // an inline lambda on every rebuild), the [TextSelectionOverlay] does
-    // not need to be recreated.
-    //
-    // We just need to trigger a rebuild of the currently-shown toolbar so its
-    // overlay entry picks up the new closure.
-    final TextSelectionOverlay? selectionOverlay = _selectionOverlay;
-    if (selectionOverlay != null &&
-        selectionOverlay.toolbarIsVisible &&
-        widget.contextMenuBuilder != oldWidget.contextMenuBuilder &&
-        (widget.contextMenuBuilder == null) ==
-            (oldWidget.contextMenuBuilder == null)) {
-      // Deferred to the next frame because showToolbar() calls
-      // renderBox.localToGlobal(), which requires a fully laid-out render
-      // tree, and didUpdateWidget is called before layout.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && (_selectionOverlay?.toolbarIsVisible ?? false)) {
-          _selectionOverlay!.showToolbar();
-        }
-      });
-    }
-
     if (_selectionOverlay != null &&
-        ((widget.contextMenuBuilder == null) !=
-                (oldWidget.contextMenuBuilder == null) ||
+        (widget.contextMenuBuilder != oldWidget.contextMenuBuilder ||
             widget.selectionControls != oldWidget.selectionControls ||
             widget.onSelectionHandleTapped !=
                 oldWidget.onSelectionHandleTapped ||
@@ -3348,38 +3272,11 @@ class EditableTextState extends State<EditableText>
     }
 
     if (_hasInputConnection) {
-      final obscureTextChanged = oldWidget.obscureText != widget.obscureText;
-      if (obscureTextChanged || oldWidget.keyboardType != widget.keyboardType) {
-        if (obscureTextChanged) {
-          // When obscureText is toggled, we should reset its state to prevent the last character from being visible between state changes.
-          _obscureShowCharTicksPending = 0;
-          _obscureLatestCharIndex = null;
-        }
+      if (oldWidget.obscureText != widget.obscureText ||
+          oldWidget.keyboardType != widget.keyboardType) {
         _textInputConnection!.updateConfig(
           _effectiveAutofillClient.textInputConfiguration,
         );
-      }
-    }
-
-    if (oldWidget.spellCheckConfiguration != widget.spellCheckConfiguration ||
-        oldWidget.obscureText != widget.obscureText ||
-        oldWidget.keyboardType != widget.keyboardType ||
-        !listEquals<String>(
-          oldWidget.autofillHints?.toList(growable: false),
-          widget.autofillHints?.toList(growable: false),
-        )) {
-      _spellCheckConfiguration = _inferSpellCheckConfiguration(
-        widget.spellCheckConfiguration,
-        obscureText: widget.obscureText,
-        keyboardType: widget.keyboardType,
-        autofillHints: widget.autofillHints,
-      );
-      if (spellCheckEnabled) {
-        if (textEditingValue.text.isNotEmpty) {
-          _performSpellCheck(textEditingValue.text);
-        }
-      } else {
-        spellCheckResults = null;
       }
     }
 
@@ -3390,14 +3287,13 @@ class EditableTextState extends State<EditableText>
           ? widget.style.merge(const TextStyle(fontWeight: FontWeight.bold))
           : widget.style;
       if (_hasInputConnection) {
-        // Schedule the style update after layout to ensure preferredLineHeight
-        // is computed with the new style.
-        SchedulerBinding.instance.addPostFrameCallback((Duration _) {
-          if (!mounted || !_hasInputConnection) {
-            return;
-          }
-          _textInputConnection!.updateStyle(_getTextInputStyle(context));
-        }, debugLabel: 'EditableText.updateStyle');
+        _textInputConnection!.setStyle(
+          fontFamily: _style.fontFamily,
+          fontSize: _style.fontSize,
+          fontWeight: _style.fontWeight,
+          textDirection: _textDirection,
+          textAlign: widget.textAlign,
+        );
       }
     }
 
@@ -3421,27 +3317,6 @@ class EditableTextState extends State<EditableText>
       );
       _scrollNotificationObserver = null;
     }
-  }
-
-  TextInputStyle _getTextInputStyle(BuildContext context) {
-    final double? letterSpacingOverride =
-        MediaQuery.maybeLetterSpacingOverrideOf(context);
-    final double? wordSpacingOverride = MediaQuery.maybeWordSpacingOverrideOf(
-      context,
-    );
-
-    return TextInputStyle(
-      fontFamily: _style.fontFamily,
-      fontSize: _style.fontSize,
-      fontWeight: _style.fontWeight,
-      textDirection: _textDirection,
-      textAlign: widget.textAlign,
-      letterSpacing: letterSpacingOverride ?? _style.letterSpacing,
-      wordSpacing: wordSpacingOverride ?? _style.wordSpacing,
-      // preferredLineHeight already includes lineHeightScaleFactor from
-      // _OverridingTextStyleTextSpanUtils.applyTextSpacingOverrides.
-      lineHeight: renderEditable.preferredLineHeight,
-    );
   }
 
   @protected
@@ -3513,13 +3388,6 @@ class EditableTextState extends State<EditableText>
           affinity: _value.selection.affinity,
         ),
       );
-      if (remoteValue != null) {
-        remoteValue = remoteValue.copyWith(
-          selection: remoteValue.selection.copyWith(
-            affinity: _value.selection.affinity,
-          ),
-        );
-      }
     }
 
     if (widget.readOnly) {
@@ -3557,6 +3425,11 @@ class EditableTextState extends State<EditableText>
         // overlay; the selection handle's visibility will be handled
         // by `_handleSelectionChanged`. https://github.com/flutter/flutter/issues/108673
         hideToolbar(false);
+        // Sync items for non-delta text updates (e.g., OHOS preview text
+        // path which uses updateEditingState instead of deltas).
+        if (widget.controller.plainText != value.text) {
+          widget.controller.syncItemsFromTextChange(_value.text, value);
+        }
       }
       _currentPromptRectRange = null;
 
@@ -3638,8 +3511,6 @@ class EditableTextState extends State<EditableText>
     }
   }
 
-  TextRange? _deletedRange;
-
   @override
   void updateEditingValueWithDeltas(List<TextEditingDelta> textEditingDeltas) {
     if (textEditingDeltas.isEmpty) {
@@ -3648,35 +3519,14 @@ class EditableTextState extends State<EditableText>
     }
     TextEditingValue remoteValue = _value;
     for (final TextEditingDelta delta in textEditingDeltas) {
-      if (PlatformUtils.isDesktop) {
-        if (_deletedRange case final range?) {
-          final deleteDelta = TextEditingDeltaDeletion(
-            oldText: remoteValue.text,
-            deletedRange: range,
-            selection: remoteValue.selection,
-            composing: remoteValue.composing,
-          );
-          _deletedRange = null;
-          widget.controller.syncRichText(deleteDelta);
-        } else if (delta is TextEditingDeltaInsertion &&
-            !remoteValue.selection.isCollapsed) {
-          final offset = delta.textInserted.length;
-          _deletedRange = TextRange(
-            start: remoteValue.selection.start + offset,
-            end: remoteValue.selection.end + offset,
-          );
-        }
-      }
       widget.controller.syncRichText(delta);
       remoteValue = delta.apply(remoteValue);
     }
 
-    final plainText = widget.controller.plainText;
-    final composing = textEditingDeltas.last.composing;
-    final newValue = TextEditingValue(
-      text: plainText,
+    final newValue = _value.copyWith(
+      text: widget.controller.plainText,
       selection: widget.controller.newSelection,
-      composing: composing.end <= plainText.length ? composing : .empty,
+      composing: textEditingDeltas.last.composing,
     );
 
     updateEditingValue(newValue, remoteValue: remoteValue);
@@ -4097,7 +3947,13 @@ class EditableTextState extends State<EditableText>
       _updateSizeAndTransform();
       _schedulePeriodicPostFrameCallbacks();
       _textInputConnection!
-        ..updateStyle(_getTextInputStyle(context))
+        ..setStyle(
+          fontFamily: _style.fontFamily,
+          fontSize: _style.fontSize,
+          fontWeight: _style.fontWeight,
+          textDirection: _textDirection,
+          textAlign: widget.textAlign,
+        )
         ..setEditingState(localValue)
         ..show();
       if (_needsAutofill) {
@@ -4163,7 +4019,13 @@ class EditableTextState extends State<EditableText>
 
     newConnection
       ..show()
-      ..updateStyle(_getTextInputStyle(context))
+      ..setStyle(
+        fontFamily: _style.fontFamily,
+        fontSize: _style.fontSize,
+        fontWeight: _style.fontWeight,
+        textDirection: _textDirection,
+        textAlign: widget.textAlign,
+      )
       ..setEditingState(_value);
     _lastKnownRemoteTextEditingValue = _value;
   }
@@ -4177,15 +4039,6 @@ class EditableTextState extends State<EditableText>
       oldControl?.hide();
       newControl?.show();
     }
-  }
-
-  @override
-  bool onFocusReceived() {
-    if (mounted && !_hasFocus && widget.focusNode.canRequestFocus) {
-      widget.focusNode.requestFocus();
-      return true;
-    }
-    return false;
   }
 
   @override
@@ -4227,7 +4080,8 @@ class EditableTextState extends State<EditableText>
       _openInputConnection();
     } else {
       _flagInternalFocus();
-      widget.focusNode.requestFocus(); // This eventually calls _openInputConnection also, see _handleFocusChanged.
+      widget.focusNode
+          .requestFocus(); // This eventually calls _openInputConnection also, see _handleFocusChanged.
     }
   }
 
@@ -4243,11 +4097,14 @@ class EditableTextState extends State<EditableText>
   }
 
   final bool _platformSupportsFadeOnScroll = switch (defaultTargetPlatform) {
-    TargetPlatform.android || TargetPlatform.iOS => true,
-    TargetPlatform.fuchsia ||
+    // ↓↓↓ 适配flutter 3.32.4-ohos-0.0.1
+    // TargetPlatform.android || TargetPlatform.iOS => true,
+    // TargetPlatform.fuchsia ||
     TargetPlatform.linux ||
     TargetPlatform.macOS ||
     TargetPlatform.windows => false,
+    _ => true,
+    // ↑↑↑ 适配flutter 3.32.4-ohos-0.0.1
   };
 
   bool _isInternalScrollableNotification(BuildContext? notificationContext) {
@@ -4381,7 +4238,7 @@ class EditableTextState extends State<EditableText>
         return;
       }
       _showToolbarOnScreenScheduled = true;
-      void scheduleToolbar(Duration _) {
+      SchedulerBinding.instance.addPostFrameCallback((Duration _) {
         _showToolbarOnScreenScheduled = false;
         if (!mounted || _dataWhenToolbarShowScheduled == null) {
           return;
@@ -4411,25 +4268,7 @@ class EditableTextState extends State<EditableText>
           showToolbar();
           _dataWhenToolbarShowScheduled = null;
         }
-      }
-
-      switch (SchedulerBinding.instance.schedulerPhase) {
-        case SchedulerPhase.idle:
-        case SchedulerPhase.postFrameCallbacks:
-          // During these scheduler phases we cannot guarantee
-          // there will be a frame after, so we use scheduleFrameCallback.
-          SchedulerBinding.instance.scheduleFrameCallback(scheduleToolbar);
-        case SchedulerPhase.transientCallbacks:
-        case SchedulerPhase.midFrameMicrotasks:
-        case SchedulerPhase.persistentCallbacks:
-          // During an active frame we can still schedule
-          // a post-frame callback to be run after the
-          // current frame.
-          SchedulerBinding.instance.addPostFrameCallback(
-            scheduleToolbar,
-            debugLabel: 'EditableText.scheduleToolbar',
-          );
-      }
+      }, debugLabel: 'EditableText.scheduleToolbar');
     }
   }
 
@@ -4454,17 +4293,9 @@ class EditableTextState extends State<EditableText>
     return true;
   }
 
-  // Stable method reference that dispatches to the current
-  // widget.contextMenuBuilder.
-  //
-  // The identity of this method is constant across rebuilds, so passing it to
-  // the TextSelectionOverlay means the overlay never has to be recreated when
-  // only the builder closure changes.
-  Widget _contextMenuBuilder(BuildContext context) {
-    return widget.contextMenuBuilder!(context, this);
-  }
-
   TextSelectionOverlay _createSelectionOverlay() {
+    final EditableTextContextMenuBuilder? contextMenuBuilder =
+        widget.contextMenuBuilder;
     final selectionOverlay = TextSelectionOverlay(
       controller: widget.controller,
       clipboardStatus: clipboardStatus,
@@ -4479,10 +4310,11 @@ class EditableTextState extends State<EditableText>
       selectionDelegate: this,
       dragStartBehavior: widget.dragStartBehavior,
       onSelectionHandleTapped: widget.onSelectionHandleTapped,
-      contextMenuBuilder:
-          widget.contextMenuBuilder == null || _webContextMenuEnabled
+      contextMenuBuilder: contextMenuBuilder == null || _webContextMenuEnabled
           ? null
-          : _contextMenuBuilder,
+          : (BuildContext context) {
+              return contextMenuBuilder(context, this);
+            },
       magnifierConfiguration: widget.magnifierConfiguration,
     );
 
@@ -4675,7 +4507,7 @@ class EditableTextState extends State<EditableText>
     _lastBottomViewInset = view.viewInsets.bottom;
   }
 
-  Future<void> _performSpellCheck(String text) async {
+  Future<void> _performSpellCheck(final String text) async {
     try {
       final Locale? localeForSpellChecking =
           widget.locale ?? Localizations.maybeLocaleOf(context);
@@ -4689,10 +4521,9 @@ class EditableTextState extends State<EditableText>
           .spellCheckService!
           .fetchSpellCheckSuggestions(localeForSpellChecking!, text);
 
-      if (suggestions == null || !mounted || !spellCheckEnabled) {
+      if (suggestions == null || !mounted) {
         // The request to fetch spell check suggestions was canceled due to ongoing request,
-        // the widget was unmounted, or spell check was disabled before the
-        // request completed.
+        // or the widget was unmounted.
         return;
       }
 
@@ -4814,16 +4645,14 @@ class EditableTextState extends State<EditableText>
     SelectionChangedCause? cause,
   ) {
     switch (defaultTargetPlatform) {
-      case TargetPlatform.iOS:
-      case TargetPlatform.macOS:
-        if (cause == SelectionChangedCause.longPress ||
-            cause == SelectionChangedCause.drag) {
-          bringIntoView(newSelection.extent);
-        }
+      // ↓↓↓ 适配flutter 3.32.4-ohos-0.0.1
+      // case TargetPlatform.iOS:
+      // case TargetPlatform.macOS:
+      // case TargetPlatform.android:
+      // case TargetPlatform.fuchsia:
       case TargetPlatform.linux:
       case TargetPlatform.windows:
-      case TargetPlatform.fuchsia:
-      case TargetPlatform.android:
+      case TargetPlatform.macOS:
         if (cause == SelectionChangedCause.drag) {
           if (oldSelection.baseOffset != newSelection.baseOffset) {
             bringIntoView(newSelection.base);
@@ -4831,6 +4660,12 @@ class EditableTextState extends State<EditableText>
             bringIntoView(newSelection.extent);
           }
         }
+      default:
+        if (cause == SelectionChangedCause.longPress ||
+            cause == SelectionChangedCause.drag) {
+          bringIntoView(newSelection.extent);
+        }
+      // ↑↑↑ 适配flutter 3.32.4-ohos-0.0.1
     }
   }
 
@@ -4975,7 +4810,6 @@ class EditableTextState extends State<EditableText>
   }
 
   void _handleFocusChanged() {
-    _deletedRange = null;
     _openOrCloseInputConnectionIfNeeded();
     _startOrStopCursorTimerIfNeeded();
     _updateOrDisposeSelectionOverlayIfNeeded();
@@ -5217,11 +5051,9 @@ class EditableTextState extends State<EditableText>
   ) {
     // Compare the current TextEditingValue with the pre-format new
     // TextEditingValue value, in case the formatter would reject the change.
-    final shouldShowCaret =
-        cause != .drag &&
-        (widget.readOnly
-            ? _value.selection != value.selection
-            : _value != value);
+    final shouldShowCaret = widget.readOnly
+        ? _value.selection != value.selection
+        : _value != value;
     if (shouldShowCaret) {
       scheduleShowCaretOnScreen(withAnimation: true);
     }
@@ -5317,7 +5149,9 @@ class EditableTextState extends State<EditableText>
   /// available for click-and-replace.
   bool showSpellCheckSuggestionsToolbar() {
     // Spell check suggestions toolbars are intended to be shown on non-web
-    // platforms.
+    // platforms. Additionally, the Cupertino style toolbar can't be drawn on
+    // the web with the HTML renderer due to
+    // https://github.com/flutter/flutter/issues/123560.
     if (!spellCheckEnabled ||
         _webContextMenuEnabled ||
         widget.readOnly ||
@@ -5443,7 +5277,7 @@ class EditableTextState extends State<EditableText>
 
     _viewId = View.of(context).viewId;
     return TextInputConfiguration(
-      enableDeltaModel: true,
+      enableDeltaModel: !OS.isHarmony, // ohos平台不支持delta模型，不要开启
       viewId: _viewId,
       inputType: widget.keyboardType,
       readOnly: widget.readOnly,
@@ -5466,7 +5300,6 @@ class EditableTextState extends State<EditableText>
           ? const <String>[]
           : widget.contentInsertionConfiguration!.allowedMimeTypes,
       hintLocales: widget.hintLocales,
-      enableInlinePrediction: widget.enableInlinePrediction,
     );
   }
 
@@ -5660,39 +5493,33 @@ class EditableTextState extends State<EditableText>
 
   void _replaceText(ReplaceTextIntent intent) {
     final TextEditingValue oldValue = _value;
-    final TextEditingValue newValue;
-
     // bggRGjQaUbCoE _replaceText
-    if (intent.replacementText.isEmpty) {
-      widget.controller.syncRichText(
-        TextEditingDeltaDeletion(
-          oldText: oldValue.text,
-          deletedRange: intent.replacementRange,
-          selection: .collapsed(offset: intent.replacementRange.start),
-          composing: .empty,
-        ),
-      );
-      newValue = TextEditingValue(
-        text: widget.controller.plainText,
-        selection: widget.controller.newSelection,
-        composing: .empty,
-      );
-    } else {
-      newValue = intent.currentTextEditingValue.replaced(
-        intent.replacementRange,
-        intent.replacementText,
-      );
-      widget.controller.syncRichText(
-        TextEditingDeltaReplacement(
-          oldText: oldValue.text,
-          replacementText: intent.replacementText,
-          replacedRange: intent.replacementRange,
-          selection: newValue.selection,
-          composing: newValue.composing,
-        ),
-      );
-    }
+    widget.controller.syncRichText(
+      intent.replacementText.isEmpty
+          ? TextEditingDeltaDeletion(
+              oldText: oldValue.text,
+              deletedRange: intent.replacementRange,
+              selection: TextSelection.collapsed(
+                offset: intent.replacementRange.start,
+              ),
+              composing: TextRange.empty,
+            )
+          : TextEditingDeltaReplacement(
+              oldText: oldValue.text,
+              replacementText: intent.replacementText,
+              replacedRange: intent.replacementRange,
+              selection: TextSelection.collapsed(
+                offset: intent.replacementRange.start,
+              ),
+              composing: TextRange.empty,
+            ),
+    );
 
+    final newValue = oldValue.copyWith(
+      text: widget.controller.plainText,
+      selection: widget.controller.newSelection,
+      composing: TextRange.empty,
+    );
     userUpdateTextEditingValue(newValue, intent.cause);
 
     // If there's no change in text and selection (e.g. when selecting and
@@ -5753,6 +5580,7 @@ class EditableTextState extends State<EditableText>
     }
     _scrollController.jumpTo(destination);
   }
+
 
   void _updateSelection(UpdateSelectionIntent intent) {
     assert(
@@ -6036,7 +5864,7 @@ class EditableTextState extends State<EditableText>
         child: Builder(
           builder: (BuildContext context) {
             return TextFieldTapRegion(
-              // groupId: widget.groupId,
+              groupId: widget.groupId,
               onTapOutside: _hasFocus
                   ? (PointerDownEvent event) => _onTapOutside(context, event)
                   : null,
@@ -6082,100 +5910,103 @@ class EditableTextState extends State<EditableText>
                             scrollbars: _isMultiline,
                             overscroll: false,
                           ),
-                      viewportBuilder: (BuildContext context, ViewportOffset offset) {
-                        return CompositedTransformTarget(
-                          link: _toolbarLayerLink,
-                          child: Semantics(
-                            inputType: inputType,
-                            onCopy: _semanticsOnCopy(controls),
-                            onCut: _semanticsOnCut(controls),
-                            onPaste: _semanticsOnPaste(controls),
-                            child: _ScribbleFocusable(
-                              editableKey: _editableKey,
-                              enabled: _stylusHandwritingEnabled,
-                              focusNode: widget.focusNode,
-                              updateSelectionRects: () {
-                                _openInputConnection();
-                                _updateSelectionRects(force: true);
-                              },
-                              child: SizeChangedLayoutNotifier(
-                                child: _Editable(
-                                  key: _editableKey,
-                                  controller: widget.controller,
-                                  startHandleLayerLink: _startHandleLayerLink,
-                                  endHandleLayerLink: _endHandleLayerLink,
-                                  inlineSpan:
-                                      _OverridingTextStyleTextSpanUtils.applyTextSpacingOverrides(
-                                        lineHeightScaleFactor:
-                                            lineHeightScaleFactor,
-                                        letterSpacing: letterSpacing,
-                                        wordSpacing: wordSpacing,
-                                        textSpan: buildTextSpan(),
+                      viewportBuilder:
+                          (BuildContext context, ViewportOffset offset) {
+                            return CompositedTransformTarget(
+                              link: _toolbarLayerLink,
+                              child: Semantics(
+                                inputType: inputType,
+                                onCopy: _semanticsOnCopy(controls),
+                                onCut: _semanticsOnCut(controls),
+                                onPaste: _semanticsOnPaste(controls),
+                                child: _ScribbleFocusable(
+                                  editableKey: _editableKey,
+                                  enabled: _stylusHandwritingEnabled,
+                                  focusNode: widget.focusNode,
+                                  updateSelectionRects: () {
+                                    _openInputConnection();
+                                    _updateSelectionRects(force: true);
+                                  },
+                                  child: SizeChangedLayoutNotifier(
+                                    child: _Editable(
+                                      key: _editableKey,
+                                      controller: widget.controller,
+                                      startHandleLayerLink:
+                                          _startHandleLayerLink,
+                                      endHandleLayerLink: _endHandleLayerLink,
+                                      inlineSpan:
+                                          _OverridingTextStyleTextSpanUtils.applyTextSpacingOverrides(
+                                            lineHeightScaleFactor:
+                                                lineHeightScaleFactor,
+                                            letterSpacing: letterSpacing,
+                                            wordSpacing: wordSpacing,
+                                            textSpan: buildTextSpan(),
+                                          ),
+                                      value: _value,
+                                      cursorColor: _cursorColor,
+                                      backgroundCursorColor:
+                                          widget.backgroundCursorColor,
+                                      showCursor: _cursorVisibilityNotifier,
+                                      forceLine: widget.forceLine,
+                                      readOnly: widget.readOnly,
+                                      hasFocus: _hasFocus,
+                                      maxLines: widget.maxLines,
+                                      minLines: widget.minLines,
+                                      expands: widget.expands,
+                                      strutStyle: widget.strutStyle.merge(
+                                        StrutStyle(
+                                          height: lineHeightScaleFactor,
+                                        ),
                                       ),
-                                  value: _value,
-                                  cursorColor: _cursorColor,
-                                  backgroundCursorColor:
-                                      widget.backgroundCursorColor,
-                                  showCursor: _cursorVisibilityNotifier,
-                                  forceLine: widget.forceLine,
-                                  readOnly: widget.readOnly,
-                                  hasFocus: _hasFocus,
-                                  maxLines: widget.maxLines,
-                                  minLines: widget.minLines,
-                                  expands: widget.expands,
-                                  strutStyle: widget.strutStyle.merge(
-                                    StrutStyle(
-                                      height: lineHeightScaleFactor,
+                                      selectionColor:
+                                          _selectionOverlay
+                                                  ?.spellCheckToolbarIsVisible ??
+                                              false
+                                          ? _spellCheckConfiguration
+                                                    .misspelledSelectionColor ??
+                                                widget.selectionColor
+                                          : widget.selectionColor,
+                                      textScaler: effectiveTextScaler,
+                                      textAlign: widget.textAlign,
+                                      textDirection: _textDirection,
+                                      locale: widget.locale,
+                                      textHeightBehavior:
+                                          widget.textHeightBehavior ??
+                                          DefaultTextHeightBehavior.maybeOf(
+                                            context,
+                                          ),
+                                      textWidthBasis: widget.textWidthBasis,
+                                      obscuringCharacter:
+                                          widget.obscuringCharacter,
+                                      obscureText: widget.obscureText,
+                                      offset: offset,
+                                      rendererIgnoresPointer:
+                                          widget.rendererIgnoresPointer,
+                                      cursorWidth: widget.cursorWidth,
+                                      cursorHeight: widget.cursorHeight,
+                                      cursorRadius: widget.cursorRadius,
+                                      cursorOffset:
+                                          widget.cursorOffset ?? Offset.zero,
+                                      selectionHeightStyle:
+                                          widget.selectionHeightStyle,
+                                      selectionWidthStyle:
+                                          widget.selectionWidthStyle,
+                                      paintCursorAboveText:
+                                          widget.paintCursorAboveText,
+                                      enableInteractiveSelection:
+                                          widget._userSelectionEnabled,
+                                      textSelectionDelegate: this,
+                                      devicePixelRatio: _devicePixelRatio,
+                                      promptRectRange: _currentPromptRectRange,
+                                      promptRectColor:
+                                          widget.autocorrectionTextRectColor,
+                                      clipBehavior: widget.clipBehavior,
                                     ),
                                   ),
-                                  selectionColor:
-                                      _selectionOverlay
-                                              ?.spellCheckToolbarIsVisible ??
-                                          false
-                                      ? _spellCheckConfiguration
-                                                .misspelledSelectionColor ??
-                                            widget.selectionColor
-                                      : widget.selectionColor,
-                                  textScaler: effectiveTextScaler,
-                                  textAlign: widget.textAlign,
-                                  textDirection: _textDirection,
-                                  locale: widget.locale,
-                                  textHeightBehavior:
-                                      widget.textHeightBehavior ??
-                                      DefaultTextHeightBehavior.maybeOf(
-                                        context,
-                                      ),
-                                  textWidthBasis: widget.textWidthBasis,
-                                  obscuringCharacter: widget.obscuringCharacter,
-                                  obscureText: widget.obscureText,
-                                  offset: offset,
-                                  rendererIgnoresPointer:
-                                      widget.rendererIgnoresPointer,
-                                  cursorWidth: widget.cursorWidth,
-                                  cursorHeight: widget.cursorHeight,
-                                  cursorRadius: widget.cursorRadius,
-                                  cursorOffset:
-                                      widget.cursorOffset ?? Offset.zero,
-                                  selectionHeightStyle:
-                                      widget.selectionHeightStyle,
-                                  selectionWidthStyle:
-                                      widget.selectionWidthStyle,
-                                  paintCursorAboveText:
-                                      widget.paintCursorAboveText,
-                                  enableInteractiveSelection:
-                                      widget._userSelectionEnabled,
-                                  textSelectionDelegate: this,
-                                  devicePixelRatio: _devicePixelRatio,
-                                  promptRectRange: _currentPromptRectRange,
-                                  promptRectColor:
-                                      widget.autocorrectionTextRectColor,
-                                  clipBehavior: widget.clipBehavior,
                                 ),
                               ),
-                            ),
-                          ),
-                        );
-                      },
+                            );
+                          },
                     ),
                   ),
                 ),
@@ -7133,9 +6964,15 @@ class _EditableTextTapOutsideAction
   void invoke(EditableTextTapOutsideIntent intent, [BuildContext? context]) {
     // The focus dropping behavior is only present on desktop platforms.
     switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-      case TargetPlatform.iOS:
-      case TargetPlatform.fuchsia:
+      // ↓↓↓ 适配flutter 3.32.4-ohos-0.0.1
+      // case TargetPlatform.android:
+      // case TargetPlatform.iOS:
+      // case TargetPlatform.fuchsia:
+      case TargetPlatform.linux:
+      case TargetPlatform.macOS:
+      case TargetPlatform.windows:
+        intent.focusNode.unfocus();
+      default:
         // On mobile platforms, we don't unfocus on touch events unless they're
         // in the web browser, but we do unfocus for all other kinds of events.
         switch (intent.pointerDownEvent.kind) {
@@ -7153,10 +6990,7 @@ class _EditableTextTapOutsideAction
               'Unexpected pointer down event for trackpad',
             );
         }
-      case TargetPlatform.linux:
-      case TargetPlatform.macOS:
-      case TargetPlatform.windows:
-        intent.focusNode.unfocus();
+      // ↑↑↑ 适配flutter 3.32.4-ohos-0.0.1
     }
   }
 }

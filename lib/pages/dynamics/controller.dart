@@ -48,6 +48,9 @@ class DynamicsController
   @override
   void onInit() {
     super.onInit();
+    statusBarTap
+      ..routeName = Get.currentRoute
+      ..register();
     tabController = TabController(
       vsync: this,
       length: DynamicsTabType.values.length,
@@ -166,6 +169,7 @@ class DynamicsController
 
   @override
   void onClose() {
+    statusBarTap.dispose();
     tabController.dispose();
     super.onClose();
   }

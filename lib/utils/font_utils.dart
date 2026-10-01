@@ -1,10 +1,27 @@
+/// 鸿蒙分支差异（上游原文见 `db77169b4 refa: font setting`）：
+///
+/// - **安卓分支已摘除**：上游走 JNI 调 `AndroidHelper.fontFamilies()`，而本分支没有
+///   `jni` 依赖、`lib/utils/android/bindings.g.dart` 是手写的空实现存根。
+/// - **Windows 分支已摘除**：上游用 `win32` 6.4.0 的 API（`GetDC(null)`、
+///   `LPARAM(0)` 等），而本分支 `dependency_overrides` 把 win32 钉在 5.5.3
+///   （鸿蒙化的插件链要求），两者 API 不兼容。哪天 win32 的 override 放开了，
+///   把上游那段 `_initWindows()` / `_enumFontCallback()` 抄回来即可。
+/// - Linux 的 fontconfig 分支是纯 `dart:ffi`，原样保留。
+/// - **自定义字体导入**（[pickFonts] / [init] / [fontFile]）与平台无关，全部保留；
+///   只是文件选择器换成鸿蒙适配 fork（`file_picker_ohos`）的
+///   `FilePicker.platform.pickFiles()` 实例 API。
+///
+/// 鸿蒙本身没有枚举系统字体的通道，[FontUtils.getFont] 在 ohos 上返回空集合——
+/// 字体设置页的系统字体列表因此为空，只剩「默认」与用户导入的自定义字体。
+library;
+
 import 'dart:ffi';
-import 'dart:io' show Directory, File;
+import 'dart:io' show Directory, File, Platform;
 import 'dart:ui' show loadFontFromList;
 
 import 'package:PiliPlus/models/common/danmaku/danmaku_font_sync_mode.dart';
-import 'package:PiliPlus/utils/android/bindings.g.dart';
 import 'package:PiliPlus/utils/font_name_parser.dart';
+
 import 'package:PiliPlus/utils/fontconfig.g.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:PiliPlus/utils/storage.dart';
@@ -13,13 +30,10 @@ import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:crypto/crypto.dart';
 import 'package:ffi/ffi.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart'
-    show kDebugMode, defaultTargetPlatform, debugPrint;
+import 'package:file_picker_ohos/file_picker_ohos.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
-import 'package:jni/jni.dart';
 import 'package:path/path.dart' as path;
-import 'package:win32/win32.dart';
 
 abstract final class FontUtils {
   static final _fonts = <String>{};
@@ -125,11 +139,15 @@ abstract final class FontUtils {
   @pragma('vm:notify-debugger-on-exception')
   static Future<String?> pickFonts() async {
     try {
-      final files = await FilePicker.pickFiles(
-        type: .custom,
+      // 鸿蒙适配 fork 仅提供 FilePicker.platform 实例方法（上游是静态的
+      // FilePicker.pickFiles），返回值也仍是旧版的 FilePickerResult。
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
         allowedExtensions: _kFontExts,
+        allowMultiple: true,
       );
-      if (files.isEmpty) return null;
+      final files = result?.files;
+      if (files == null || files.isEmpty) return null;
 
       String? firstFont;
       var failed = 0;
@@ -437,52 +455,13 @@ abstract final class FontUtils {
   static Set<String> getFont() {
     if (_initialized) return _fonts;
     _initialized = true;
-    if (!switch (defaultTargetPlatform) {
-      .android => _initAndroid(),
-      .windows => _initWindows(),
-      .linux => _initLinux(),
-      _ => true,
-    }) {
-      // TODO: ios/macos CTFontManagerCopyAvailableFontFamilyNames
+    // 只有真正实现了枚举的平台才在失败时提示。ohos / 安卓 / Windows / ios / macos
+    // 在本分支没有实现（原因见文件头），静默返回空集合即可，弹「加载失败」只会
+    // 误导用户——字体页在系统字体列表为空时只显示「默认」与自定义字体。
+    if (Platform.isLinux && !_initLinux()) {
       SmartDialog.showToast('加载系统字体失败');
     }
     return _fonts;
-  }
-
-  static int _enumFontCallback(
-    Pointer<LOGFONT> lpelfe,
-    Pointer<TEXTMETRIC> lpntme,
-    int fontType,
-    int lParam,
-  ) {
-    final familyName = lpelfe.ref.lfFaceName;
-    if (familyName.startsWith('@')) return 1;
-    _fonts.add(lpelfe.ref.lfFaceName);
-    return 1;
-  }
-
-  @pragma('vm:prefer-inline')
-  static bool _initWindows() {
-    final hdc = GetDC(null);
-
-    final logfont = calloc<LOGFONT>();
-    logfont.ref.lfCharSet = DEFAULT_CHARSET;
-    logfont.ref.lfFaceName = '';
-
-    try {
-      final result = EnumFontFamiliesEx(
-        hdc,
-        logfont,
-        Pointer.fromFunction(_enumFontCallback, 0),
-        const LPARAM(0),
-        0,
-      );
-
-      return result != 0;
-    } finally {
-      calloc.free(logfont);
-      ReleaseDC(null, hdc);
-    }
   }
 
   @pragma('vm:prefer-inline')
@@ -533,22 +512,5 @@ abstract final class FontUtils {
     fc.FcConfigDestroy(config);
 
     return true;
-  }
-
-  @pragma('vm:prefer-inline')
-  static bool _initAndroid() {
-    final fontFamilies = AndroidHelper.fontFamilies();
-    if (fontFamilies != null) {
-      try {
-        final length = fontFamilies.length;
-        for (var i = 0; i < length; i++) {
-          _fonts.add(fontFamilies[i]!.toDartString(releaseOriginal: true));
-        }
-        return true;
-      } finally {
-        fontFamilies.release();
-      }
-    }
-    return false;
   }
 }

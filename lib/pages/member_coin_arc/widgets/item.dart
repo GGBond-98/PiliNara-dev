@@ -30,6 +30,7 @@ class MemberCoinLikeItem extends StatelessWidget {
       aid: item.param,
     );
     return Card(
+      clipBehavior: Clip.hardEdge,
       child: InkWell(
         onTap: () async {
           if (item.isPgc == true) {
@@ -55,7 +56,6 @@ class MemberCoinLikeItem extends StatelessWidget {
         },
         onLongPress: onLongPress,
         onSecondaryTap: PlatformUtils.isMobile ? null : onLongPress,
-        borderRadius: const .all(.circular(12)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -72,7 +72,7 @@ class MemberCoinLikeItem extends StatelessWidget {
                         src: item.cover,
                         width: maxWidth,
                         height: maxHeight,
-                        borderRadius: const .vertical(top: .circular(12)),
+                        borderRadius: BorderRadius.zero, // 此处应为非表情类型，且默认不需要圆角
                       ),
                       if (item.isCooperation == true)
                         const PBadge(

@@ -21,7 +21,7 @@ Widget avatars({
     );
   } else {
     final decoration = BoxDecoration(
-      shape: .circle,
+      shape: BoxShape.circle,
       border: Border.all(color: colorScheme.surface),
     );
     return SizedBox(

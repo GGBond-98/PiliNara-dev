@@ -2,13 +2,13 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart'
     show
         MouseTrackerAnnotation,
         PointerEnterEventListener,
         PointerExitEventListener;
-import 'package:material_ui/material_ui.dart';
 
 /// https://github.com/suragch/audio_video_progress_bar
 
@@ -376,27 +376,38 @@ class _EagerHorizontalDragGestureRecognizer
 
 class RenderProgressBar extends RenderBox implements MouseTrackerAnnotation {
   RenderProgressBar({
-    required this._progress,
-    required this._total,
-    required this._buffered,
-    this._onSeek,
+    required int progress,
+    required int total,
+    required int buffered,
+    OnSeek? onSeek,
     ThumbDragStartCallback? onDragStart,
     ThumbDragUpdateCallback? onDragUpdate,
     VoidCallback? onDragEnd,
     ThumbHoverCallback? onHoverStart,
     ThumbHoverCallback? onHoverUpdate,
     VoidCallback? onHoverEnd,
-    required this._barHeight,
-    required this._baseBarColor,
-    required this._progressBarColor,
-    required this._bufferedBarColor,
+    required double barHeight,
+    required Color baseBarColor,
+    required Color progressBarColor,
+    required Color bufferedBarColor,
     double thumbRadius = 20.0,
     double? minHeight,
-    required this._thumbColor,
-    required this._thumbGlowColor,
+    required Color thumbColor,
+    required Color thumbGlowColor,
     double thumbGlowRadius = 30.0,
-    this._thumbCanPaintOutsideBar = true,
-  }) : _onDragStartUserCallback = onDragStart,
+    bool thumbCanPaintOutsideBar = true,
+  }) : _progress = progress,
+       _total = total,
+       _buffered = buffered,
+       _onSeek = onSeek,
+       _barHeight = barHeight,
+       _baseBarColor = baseBarColor,
+       _progressBarColor = progressBarColor,
+       _bufferedBarColor = bufferedBarColor,
+       _thumbColor = thumbColor,
+       _thumbGlowColor = thumbGlowColor,
+       _thumbCanPaintOutsideBar = thumbCanPaintOutsideBar,
+       _onDragStartUserCallback = onDragStart,
        _onDragUpdateUserCallback = onDragUpdate,
        _onDragEndUserCallback = onDragEnd,
        _onHoverStartUserCallback = onHoverStart,

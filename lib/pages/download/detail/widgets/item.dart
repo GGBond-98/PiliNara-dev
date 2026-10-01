@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/badge.dart';
 import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
+import 'package:PiliPlus/common/widgets/dialog/simple_dialog_option.dart';
 import 'package:PiliPlus/common/widgets/flutter/popup_menu.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/common/widgets/progress_bar/video_progress_indicator.dart';
@@ -85,7 +87,54 @@ class DetailItem extends StatelessWidget {
       if (enableMultiSelect) {
         return;
       }
-      customOnLongPress?.call();
+      if (customOnLongPress != null) {
+        customOnLongPress!.call();
+        return;
+      }
+      if (canDel) {
+        showDialog(
+          context: context,
+          builder: (context) => SimpleDialog(
+              clipBehavior: Clip.hardEdge,
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              children: [
+                DialogOption(
+                  onPressed: () {
+                    Get.back();
+                    showConfirmDialog(
+                      context: context,
+                      title: const Text('确定删除该视频？'),
+                      onConfirm: onDelete,
+                    );
+                  },
+                  child: const Text('删除', style: TextStyle(fontSize: 14)),
+                ),
+                DialogOption(
+                  onPressed: () async {
+                    Get.back();
+                    final res = await downloadService.downloadDanmaku(
+                      entry: entry,
+                      isUpdate: true,
+                    );
+                    if (res) {
+                      SmartDialog.showToast('更新成功');
+                    } else {
+                      SmartDialog.showToast('更新失败');
+                    }
+                  },
+                  child: const Text('更新弹幕', style: TextStyle(fontSize: 14)),
+                ),
+                DialogOption(
+                  onPressed: () {
+                    Get.back();
+                    entry.shareSelf();
+                  },
+                  child: const Text('分享', style: TextStyle(fontSize: 14)),
+                ),
+              ],
+            ),
+        );
+      }
     }
 
     return Material(
@@ -207,29 +256,27 @@ class DetailItem extends StatelessWidget {
                             left: 0,
                             right: 0,
                             bottom: 0,
-                            child: Column(
-                              crossAxisAlignment: .end,
+                            child: Stack(
+                              clipBehavior: Clip.none,
                               children: [
-                                Padding(
-                                  padding: const .only(right: 6, bottom: 3),
-                                  child: PBadge(
-                                    isStack: false,
-                                    text: progress >= entry.totalTimeMilli - 400
-                                        ? '已看完'
-                                        : '${DurationUtils.formatDuration(
-                                                progress ~/ 1000,
-                                              )}/'
-                                              '${DurationUtils.formatDuration(
-                                                entry.totalTimeMilli ~/ 1000,
-                                              )}',
-                                    type: .gray,
-                                  ),
-                                ),
                                 VideoProgressIndicator(
                                   color: theme.colorScheme.primary,
                                   backgroundColor:
                                       theme.colorScheme.secondaryContainer,
                                   progress: progress / entry.totalTimeMilli,
+                                ),
+                                PBadge(
+                                  text: progress >= entry.totalTimeMilli - 400
+                                      ? '已看完'
+                                      : '${DurationUtils.formatDuration(
+                                              progress ~/ 1000,
+                                            )}/'
+                                            '${DurationUtils.formatDuration(
+                                              entry.totalTimeMilli ~/ 1000,
+                                            )}',
+                                  right: 6,
+                                  bottom: 7,
+                                  type: PBadgeType.gray,
                                 ),
                               ],
                             ),

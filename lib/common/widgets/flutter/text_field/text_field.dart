@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// ignore_for_file: prefer_initializing_formals, uri_does_not_exist_in_doc_import
+// ignore_for_file: uri_does_not_exist_in_doc_import
 
 /// @docImport 'input_border.dart';
 /// @docImport 'material.dart';
@@ -13,6 +13,7 @@ library;
 
 import 'dart:ui' as ui show BoxHeightStyle, BoxWidthStyle;
 
+import 'package:PiliPlus/common/widgets/flutter/text_field/adaptive_text_selection_toolbar.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/controller.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/cupertino/spell_check_suggestions_toolbar.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/cupertino/text_field.dart';
@@ -21,7 +22,7 @@ import 'package:PiliPlus/common/widgets/flutter/text_field/spell_check.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/spell_check_suggestions_toolbar.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/system_context_menu.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/text_selection.dart';
-import 'package:cupertino_ui/cupertino_ui.dart'
+import 'package:flutter/cupertino.dart'
     hide
         EditableText,
         EditableTextState,
@@ -35,19 +36,20 @@ import 'package:cupertino_ui/cupertino_ui.dart'
         TextSelectionGestureDetectorBuilderDelegate;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/services.dart';
-import 'package:material_ui/material_ui.dart'
+import 'package:flutter/material.dart'
     hide
-        TextField,
         EditableText,
         EditableTextState,
         EditableTextContextMenuBuilder,
+        AdaptiveTextSelectionToolbar,
         SystemContextMenu,
         SpellCheckSuggestionsToolbar,
         SpellCheckConfiguration,
         TextSelectionGestureDetectorBuilder,
         TextSelectionOverlay,
         TextSelectionGestureDetectorBuilderDelegate;
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 
 class _TextFieldSelectionGestureDetectorBuilder
     extends TextSelectionGestureDetectorBuilder {
@@ -65,6 +67,31 @@ class _TextFieldSelectionGestureDetectorBuilder
   @override
   void onUserTap() {
     _state.widget.onTap?.call();
+  }
+
+  @override
+  void onSingleTapUp(TapDragUpDetails details) {
+    _state._deviceKind = details.kind;
+    super.onSingleTapUp(details);
+  }
+
+  @override
+  void onSingleLongTapStart(LongPressStartDetails details) {
+    super.onSingleLongTapStart(details);
+    if (delegate.selectionEnabled) {
+      switch (Theme.of(_state.context).platform) {
+        case TargetPlatform.iOS:
+        case TargetPlatform.macOS:
+          break;
+        case TargetPlatform.android:
+        case TargetPlatform.fuchsia:
+        case TargetPlatform.linux:
+        case TargetPlatform.windows:
+          Feedback.forLongPress(_state.context);
+        default:
+          Feedback.forLongPress(_state.context);
+      }
+    }
   }
 }
 
@@ -297,7 +324,7 @@ class RichTextField extends StatefulWidget {
     this.scrollPadding = const EdgeInsets.all(20.0),
     this.dragStartBehavior = DragStartBehavior.start,
     bool? enableInteractiveSelection,
-    this.selectAllOnFocus = false,
+    this.selectAllOnFocus,
     this.selectionControls,
     this.onTap,
     this.onTapAlwaysCalled = false,
@@ -319,7 +346,6 @@ class RichTextField extends StatefulWidget {
     this.stylusHandwritingEnabled =
         EditableText.defaultStylusHandwritingEnabled,
     this.enableIMEPersonalizedLearning = true,
-    this.enableInlinePrediction,
     this.contextMenuBuilder = _defaultContextMenuBuilder,
     this.canRequestFocus = true,
     this.spellCheckConfiguration,
@@ -867,9 +893,6 @@ class RichTextField extends StatefulWidget {
   /// {@macro flutter.services.TextInputConfiguration.enableIMEPersonalizedLearning}
   final bool enableIMEPersonalizedLearning;
 
-  /// {@macro flutter.services.TextInputConfiguration.enableInlinePrediction}
-  final bool? enableInlinePrediction;
-
   /// {@macro flutter.widgets.editableText.contentInsertionConfiguration}
   final ContentInsertionConfiguration? contentInsertionConfiguration;
 
@@ -903,9 +926,8 @@ class RichTextField extends StatefulWidget {
         editableTextState: editableTextState,
       );
     }
-    return AdaptiveTextSelectionToolbar.buttonItems(
-      anchors: editableTextState.contextMenuAnchors,
-      buttonItems: editableTextState.contextMenuButtonItems,
+    return AdaptiveTextSelectionToolbar.editableText(
+      editableTextState: editableTextState,
     );
   }
 
@@ -946,18 +968,22 @@ class RichTextField extends StatefulWidget {
     EditableTextState editableTextState,
   ) {
     switch (defaultTargetPlatform) {
-      case TargetPlatform.iOS:
-      case TargetPlatform.macOS:
-        return CupertinoSpellCheckSuggestionsToolbar.editableText(
-          editableTextState: editableTextState,
-        );
-      case TargetPlatform.android:
-      case TargetPlatform.fuchsia:
+      // ↓↓↓ 适配flutter 3.32.4-ohos-0.0.1
+      // case TargetPlatform.iOS:
+      // case TargetPlatform.macOS:
+      // case TargetPlatform.android:
+      // case TargetPlatform.fuchsia:
       case TargetPlatform.linux:
       case TargetPlatform.windows:
+      case TargetPlatform.macOS:
         return SpellCheckSuggestionsToolbar.editableText(
           editableTextState: editableTextState,
         );
+      default:
+        return CupertinoSpellCheckSuggestionsToolbar.editableText(
+          editableTextState: editableTextState,
+        );
+      // ↑↑↑ 适配flutter 3.32.4-ohos-0.0.1
     }
   }
 
@@ -1002,7 +1028,9 @@ class RichTextField extends StatefulWidget {
           defaultValue: null,
         ),
       )
-      ..add(DiagnosticsProperty<bool>('enabled', enabled, defaultValue: null))
+      ..add(
+        DiagnosticsProperty<bool>('enabled', enabled, defaultValue: null),
+      )
       ..add(
         DiagnosticsProperty<InputDecoration>(
           'decoration',
@@ -1017,7 +1045,9 @@ class RichTextField extends StatefulWidget {
           defaultValue: TextInputType.text,
         ),
       )
-      ..add(DiagnosticsProperty<TextStyle>('style', style, defaultValue: null))
+      ..add(
+        DiagnosticsProperty<TextStyle>('style', style, defaultValue: null),
+      )
       ..add(
         DiagnosticsProperty<bool>('autofocus', autofocus, defaultValue: false),
       )
@@ -1069,7 +1099,9 @@ class RichTextField extends StatefulWidget {
       )
       ..add(IntProperty('maxLines', maxLines, defaultValue: 1))
       ..add(IntProperty('minLines', minLines, defaultValue: null))
-      ..add(DiagnosticsProperty<bool>('expands', expands, defaultValue: false))
+      ..add(
+        DiagnosticsProperty<bool>('expands', expands, defaultValue: false),
+      )
       ..add(IntProperty('maxLength', maxLength, defaultValue: null))
       ..add(
         EnumProperty<MaxLengthEnforcement>(
@@ -1113,8 +1145,12 @@ class RichTextField extends StatefulWidget {
           defaultValue: null,
         ),
       )
-      ..add(DoubleProperty('cursorWidth', cursorWidth, defaultValue: 2.0))
-      ..add(DoubleProperty('cursorHeight', cursorHeight, defaultValue: null))
+      ..add(
+        DoubleProperty('cursorWidth', cursorWidth, defaultValue: 2.0),
+      )
+      ..add(
+        DoubleProperty('cursorHeight', cursorHeight, defaultValue: null),
+      )
       ..add(
         DiagnosticsProperty<Radius>(
           'cursorRadius',
@@ -1129,7 +1165,9 @@ class RichTextField extends StatefulWidget {
           defaultValue: null,
         ),
       )
-      ..add(ColorProperty('cursorColor', cursorColor, defaultValue: null))
+      ..add(
+        ColorProperty('cursorColor', cursorColor, defaultValue: null),
+      )
       ..add(
         ColorProperty('cursorErrorColor', cursorErrorColor, defaultValue: null),
       )
@@ -1202,13 +1240,6 @@ class RichTextField extends StatefulWidget {
           'enableIMEPersonalizedLearning',
           enableIMEPersonalizedLearning,
           defaultValue: true,
-        ),
-      )
-      ..add(
-        DiagnosticsProperty<bool?>(
-          'enableInlinePrediction',
-          enableInlinePrediction,
-          defaultValue: null,
         ),
       )
       ..add(
@@ -1414,6 +1445,7 @@ class RichTextFieldState extends State<RichTextField>
   @override
   void didUpdateWidget(RichTextField oldWidget) {
     super.didUpdateWidget(oldWidget);
+
     if (widget.focusNode != oldWidget.focusNode) {
       (oldWidget.focusNode ?? _focusNode)?.removeListener(_handleFocusChanged);
       (widget.focusNode ?? _focusNode)?.addListener(_handleFocusChanged);
@@ -1462,7 +1494,11 @@ class RichTextFieldState extends State<RichTextField>
 
   EditableTextState? get _editableText => editableTextKey.currentState;
 
-  void _requestKeyboard() {
+  // ignore: unused_field
+  PointerDeviceKind _deviceKind = PointerDeviceKind.unknown;
+
+  void _requestKeyboard({PointerDeviceKind kind = PointerDeviceKind.unknown}) {
+    _deviceKind = kind;
     _editableText?.requestKeyboard();
   }
 
@@ -1524,7 +1560,13 @@ class RichTextFieldState extends State<RichTextField>
       case TargetPlatform.windows:
       case TargetPlatform.fuchsia:
       case TargetPlatform.android:
-        if (cause == SelectionChangedCause.longPress) {
+        if (cause == SelectionChangedCause.longPress ||
+            cause == SelectionChangedCause.drag) {
+          _editableText?.bringIntoView(selection.extent);
+        }
+      default:
+        if (cause == SelectionChangedCause.longPress ||
+            cause == SelectionChangedCause.drag) {
           _editableText?.bringIntoView(selection.extent);
         }
     }
@@ -1540,6 +1582,8 @@ class RichTextFieldState extends State<RichTextField>
         if (cause == SelectionChangedCause.drag) {
           _editableText?.hideToolbar();
         }
+      default:
+        break;
     }
   }
 
@@ -1683,6 +1727,11 @@ class RichTextFieldState extends State<RichTextField>
             RichTextField.inferAndroidSpellCheckConfiguration(
               widget.spellCheckConfiguration,
             );
+      default:
+        spellCheckConfiguration =
+            RichTextField.inferAndroidSpellCheckConfiguration(
+              widget.spellCheckConfiguration,
+            );
     }
 
     TextSelectionControls? textSelectionControls = widget.selectionControls;
@@ -1747,22 +1796,7 @@ class RichTextFieldState extends State<RichTextField>
         handleDidLoseAccessibilityFocus = () {
           _effectiveFocusNode.unfocus();
         };
-
-      case TargetPlatform.android:
-      case TargetPlatform.fuchsia:
-        forcePressEnabled = false;
-        textSelectionControls ??= materialTextSelectionHandleControls;
-        paintCursorAboveText = false;
-        cursorOpacityAnimates ??= false;
-        cursorColor = _hasError
-            ? _errorColor
-            : widget.cursorColor ??
-                  selectionStyle.cursorColor ??
-                  theme.colorScheme.primary;
-        selectionColor =
-            selectionStyle.selectionColor ??
-            theme.colorScheme.primary.withValues(alpha: 0.40);
-
+      
       case TargetPlatform.linux:
         forcePressEnabled = false;
         textSelectionControls ??= desktopTextSelectionHandleControls;
@@ -1810,6 +1844,22 @@ class RichTextFieldState extends State<RichTextField>
         handleDidLoseAccessibilityFocus = () {
           _effectiveFocusNode.unfocus();
         };
+      
+      case TargetPlatform.android:
+      case TargetPlatform.fuchsia:
+      default:
+        forcePressEnabled = false;
+        textSelectionControls ??= materialTextSelectionHandleControls;
+        paintCursorAboveText = false;
+        cursorOpacityAnimates ??= false;
+        cursorColor = _hasError
+            ? _errorColor
+            : widget.cursorColor ??
+                  selectionStyle.cursorColor ??
+                  theme.colorScheme.primary;
+        selectionColor =
+            selectionStyle.selectionColor ??
+            theme.colorScheme.primary.withValues(alpha: 0.40);
     }
 
     Widget child = RepaintBoundary(
@@ -1882,7 +1932,6 @@ class RichTextFieldState extends State<RichTextField>
           scribbleEnabled: widget.scribbleEnabled,
           stylusHandwritingEnabled: widget.stylusHandwritingEnabled,
           enableIMEPersonalizedLearning: widget.enableIMEPersonalizedLearning,
-          enableInlinePrediction: widget.enableInlinePrediction,
           contentInsertionConfiguration: widget.contentInsertionConfiguration,
           contextMenuBuilder: widget.contextMenuBuilder,
           spellCheckConfiguration: spellCheckConfiguration,
@@ -2026,7 +2075,7 @@ TextStyle _m2CounterErrorStyle(BuildContext context) => Theme.of(
 // dart format off
 TextStyle? _m3StateInputStyle(BuildContext context) => WidgetStateTextStyle.resolveWith((Set<WidgetState> states) {
   if (states.contains(WidgetState.disabled)) {
-    return TextStyle(color: Theme.of(context).textTheme.bodyLarge!.color?.withValues(alpha: 0.38));
+    return TextStyle(color: Theme.of(context).textTheme.bodyLarge!.color?.withValues(alpha:0.38));
   }
   return TextStyle(color: Theme.of(context).textTheme.bodyLarge!.color);
 });

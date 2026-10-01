@@ -5,36 +5,78 @@ void showReplyCopyDialog(
   String message,
   Map<String, Emote> emotes,
 ) {
-  bool showEmote = false;
+  var showEmote = false;
   showDialog(
     context: context,
     builder: (context) => Dialog(
       constraints: const BoxConstraints.tightFor(width: 380),
       child: Padding(
         padding: const .symmetric(horizontal: 20, vertical: 16),
-        child: SelectionArea(
-          contextMenuBuilder: (_, state) {
-            final buttonItems = state.contextMenuButtonItems;
+        child: StatefulBuilder(
+            builder: (context, setState) => SelectionText.rich(
+            showEmote
+                ? TextSpan(
+                    children: emotes.entries.mapIndexed((index, entry) {
+                      final emote = entry.value;
+                      final size = emote.size.toInt() * 25.0;
+                      return TextSpan(
+                        children: [
+                          if (index != 0) const TextSpan(text: '\n\n'),
+                          WidgetSpan(
+                            child: NetworkImgLayer(
+                              src: emote.url,
+                              type: .emote,
+                              width: size,
+                              height: size,
+                            ),
+                          ),
+                          TextSpan(text: '\n${entry.key}\n${emote.url}'),
+                        ],
+                      );
+                    }).toList(),
+                  )
+                : TextSpan(text: message),
+            style: const TextStyle(fontSize: 15, height: 1.7),
+            contextMenuBuilder: (_, state) {
+            String? selectedText() {
+              final value = state.textEditingValue;
+              final selection = value.selection;
+              if (!selection.isValid || selection.isCollapsed) return null;
+              return selection.textInside(value.text);
+            }
+
+            final items = ensureExtraButtons(
+              state.contextMenuButtonItems,
+              selectedTextOf: selectedText,
+              hideToolbar: state.hideToolbar,
+            );
             if (emotes.isNotEmpty) {
-              buttonItems.insertOrAdd(
+              items.insertOrAdd(
                 3,
                 ContextMenuButtonItem(
                   label: showEmote ? '文本' : '表情',
                   onPressed: () {
-                    state.hideAndClear();
-                    showEmote = !showEmote;
-                    (context as Element).markNeedsBuild();
+                    state.hideToolbar();
+                    setState(() => showEmote = !showEmote);
                   },
                 ),
               );
             }
-            state.addLaunchMenuIfNeeded(buttonItems, index: 4);
-            if (state.isUncollapsed) {
-              buttonItems.add(
+            final selected = selectedText();
+            if (selected != null && selected.isNotEmpty) {
+              items.add(
                 ContextMenuButtonItem(
                   onPressed: () {
-                    final escapedText = RegExp.escape(state.selectedText!);
-
+                    state.hideToolbar();
+                    final escapedText = RegExp.escape(selected);
+                    final currentStored = Pref.banWordForReply;
+                    final existingKeywords = currentStored.isEmpty
+                        ? <String>[]
+                        : currentStored.split('\n');
+                    if (existingKeywords.contains(escapedText)) {
+                      SmartDialog.showToast('该关键词已在过滤列表中');
+                      return;
+                    }
                     showConfirmDialog(
                       context: context,
                       title: const Text('是否将以下内容加入评论过滤：'),
@@ -46,14 +88,6 @@ void showReplyCopyDialog(
                         ),
                       ),
                       onConfirm: () {
-                        final currentStored = Pref.banWordForReply;
-                        final existingKeywords = currentStored.isEmpty
-                            ? <String>[]
-                            : currentStored.split('\n');
-                        if (existingKeywords.contains(escapedText)) {
-                          SmartDialog.showToast('该关键词已在过滤列表中');
-                          return;
-                        }
                         final newStored = currentStored.isEmpty
                             ? escapedText
                             : '$currentStored\n$escapedText';
@@ -76,38 +110,10 @@ void showReplyCopyDialog(
               );
             }
             return AdaptiveTextSelectionToolbar.buttonItems(
-              buttonItems: buttonItems,
+              buttonItems: items,
               anchors: state.contextMenuAnchors,
             );
-          },
-          child: SingleChildScrollView(
-            child: Text.rich(
-              showEmote
-                  ? TextSpan(
-                      children: emotes.entries.mapIndexed(
-                        (i, e) {
-                          final emote = e.value;
-                          final size = emote.size.toInt() * 25.0;
-                          return TextSpan(
-                            children: [
-                              if (i != 0) const TextSpan(text: '\n\n'),
-                              WidgetSpan(
-                                child: NetworkImgLayer(
-                                  src: emote.url,
-                                  type: .emote,
-                                  width: size,
-                                  height: size,
-                                ),
-                              ),
-                              TextSpan(text: '\n${e.key}\n${emote.url}'),
-                            ],
-                          );
-                        },
-                      ).toList(),
-                    )
-                  : TextSpan(text: message),
-              style: const TextStyle(fontSize: 15, height: 1.7),
-            ),
+            },
           ),
         ),
       ),

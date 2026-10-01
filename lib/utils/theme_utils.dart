@@ -1,16 +1,37 @@
 import 'package:PiliPlus/common/style.dart';
+import 'package:PiliPlus/harmony_adapt/harmony_channel.dart';
 import 'package:PiliPlus/utils/extension/theme_ext.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoThemeData;
 import 'package:flutter/foundation.dart' show PlatformDispatcher;
+import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:os_type/os_type.dart';
 
 abstract final class ThemeUtils {
   static late ThemeData lightTheme;
 
   static late ThemeData darkTheme;
 
-  static late ThemeMode themeMode;
+  static final Rx<ThemeMode> _themeMode = Pref.themeMode.obs;
+
+  /// 手动将当前主题模式通知给原生层（应用内切换主题模式的开关处调用）
+  static void syncColorModeToNative() {
+    if (!OS.isHarmony) return;
+    HarmonyChannel.setSystemColorMode(themeModeMap[_themeMode.value] ?? '');
+  }
+
+  static ThemeMode get themeMode => _themeMode.value;
+
+  static set themeMode(ThemeMode value) => _themeMode.value = value;
+
+  static Rx<ThemeMode> get themeModeRx => _themeMode;
+
+  static Map<ThemeMode, String> themeModeMap = {
+    ThemeMode.light: "light",
+    ThemeMode.dark: "dark",
+    ThemeMode.system: "system",
+  };
 
   static ThemeData get theme {
     if (themeMode == .dark ||
@@ -31,13 +52,64 @@ abstract final class ThemeUtils {
     required bool isDynamic,
     bool isDark = false,
   }) {
-    final fontWeight = Pref.appFontWeight;
-    final fontFamily = Pref.appFont;
+    final appFontWeight = Pref.appFontWeight.clamp(
+      -1,
+      FontWeight.values.length - 1,
+    );
 
-    TextTheme? textTheme;
-    if (fontWeight != .normal) {
-      final textStyle = TextStyle(fontWeight: fontWeight);
-      textTheme = TextTheme(
+    FontWeight? fontWeight;
+    if (appFontWeight == -1) {
+      // 跟随系统设置
+      double systemScale;
+      if (OS.isHarmony && HarmonyChannel.systemFontWeightScale != null) {
+        final raw = HarmonyChannel.systemFontWeightScale!;
+        // 如果取到的值无效（NaN、Infinity），回退到默认值 1
+        if (raw.isNaN || raw.isInfinite) {
+          systemScale = 1.0;
+        } else {
+          systemScale = raw;
+        }
+      } else {
+        // 完全取不到值时，使用默认值 1
+        systemScale = 1.0;
+      }
+
+      // 按区间直接映射到 FontWeight，超出范围的值自动取下限(w100)或上限(w900)
+      if (systemScale <= 0.75) {
+        fontWeight = FontWeight.w100;
+      } else if (systemScale <= 0.8) {
+        fontWeight = FontWeight.w200;
+      } else if (systemScale <= 0.9) {
+        fontWeight = FontWeight.w300;
+      } else if (systemScale <= 1.1) {
+        fontWeight = FontWeight.w400;
+      } else if (systemScale <= 1.2) {
+        fontWeight = FontWeight.w500;
+      } else if (systemScale <= 1.3) {
+        fontWeight = FontWeight.w600;
+      } else if (systemScale <= 1.45) {
+        fontWeight = FontWeight.w700;
+      } else {
+        fontWeight = FontWeight.w800;
+      }
+    } else {
+      fontWeight = FontWeight.values[appFontWeight];
+    }
+
+    // 上游 4ca037345 起支持用户自选字体族，db77169b4 起改为 FontUtils.fontFamily
+    //（含自定义导入字体）。鸿蒙没有枚举系统字体的通道，用户不导入字体时它为
+    // null，回落到鸿蒙一贯的 HarmonyOS Sans；在本仓库的安卓 / Windows / Linux
+    // 构建上则由用户的选择覆盖。
+    late final fontFamily = Pref.appFont ?? "HarmonyOS Sans";
+    late final textStyle = TextStyle(
+      fontWeight: fontWeight,
+      fontFamily: fontFamily,
+    );
+    ThemeData theme = ThemeData(
+      colorScheme: colorScheme,
+      useMaterial3: true,
+      fontFamily: fontFamily,
+      textTheme: TextTheme(
         displayLarge: textStyle,
         displayMedium: textStyle,
         displaySmall: textStyle,
@@ -53,14 +125,8 @@ abstract final class ThemeUtils {
         labelLarge: textStyle,
         labelMedium: textStyle,
         labelSmall: textStyle,
-      );
-    }
-
-    final theme = ThemeData(
-      useMaterial3: true,
-      colorScheme: colorScheme,
-      fontFamily: fontFamily,
-      textTheme: textTheme,
+      ),
+      tabBarTheme: TabBarThemeData(labelStyle: textStyle),
       appBarTheme: AppBarTheme(
         elevation: 0,
         titleSpacing: 0,

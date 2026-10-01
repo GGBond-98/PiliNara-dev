@@ -8,9 +8,8 @@ import 'package:PiliPlus/common/widgets/dynamic_sliver_app_bar/dynamic_sliver_ap
 import 'package:PiliPlus/common/widgets/flutter/popup_menu.dart';
 import 'package:PiliPlus/common/widgets/gesture/tap_gesture_recognizer.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/loading_widget.dart';
-import 'package:PiliPlus/common/widgets/scroll_behavior.dart'
-    show NoOverscrollIndicator;
-import 'package:PiliPlus/common/widgets/scroll_physics.dart' show tabBarView;
+import 'package:PiliPlus/common/widgets/scroll_physics.dart';
+import 'package:PiliPlus/harmony_adapt/harmony_channel.dart';
 import 'package:PiliPlus/http/live.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/http/user.dart';
@@ -39,16 +38,20 @@ import 'package:PiliPlus/utils/android/android_helper.dart';
 import 'package:PiliPlus/utils/cache_manager.dart';
 import 'package:PiliPlus/utils/date_utils.dart';
 import 'package:PiliPlus/utils/extension/context_ext.dart';
+import 'package:PiliPlus/utils/extension/nested_scroll_ext.dart';
+import 'package:PiliPlus/utils/extension/scroll_controller_ext.dart';
 import 'package:PiliPlus/utils/extension/string_ext.dart';
 import 'package:PiliPlus/utils/num_utils.dart';
 import 'package:PiliPlus/utils/page_utils.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
+import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:extended_nested_scroll_view/extended_nested_scroll_view.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:os_type/os_type.dart';
 
 class MemberPage extends StatefulWidget {
   const MemberPage({super.key});
@@ -57,13 +60,22 @@ class MemberPage extends StatefulWidget {
   State<MemberPage> createState() => _MemberPageState();
 }
 
-class _MemberPageState extends State<MemberPage> {
+class _MemberPageState extends State<MemberPage> with WidgetsBindingObserver {
   late final int _mid;
   late final String _heroTag;
   late final MemberController _userController;
+  late final String _routeName;
   PageController? _headerController;
   PageController getHeaderController() =>
       _headerController ??= PageController();
+
+  /// 当前应用生命周期状态
+  AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycleState = state;
+  }
 
   @override
   void initState() {
@@ -74,6 +86,8 @@ class _MemberPageState extends State<MemberPage> {
       MemberController(mid: _mid),
       tag: _heroTag,
     );
+    _routeName = Get.currentRoute;
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
@@ -86,6 +100,19 @@ class _MemberPageState extends State<MemberPage> {
   }
 
   @override
+  void handleStatusBarTap() {
+    if (!Pref.enableStatusBarTapToTop) return;
+    if (Get.currentRoute != _routeName) return;
+    // 仅在应用处于前台（resumed）时触发
+    if (_lifecycleState != AppLifecycleState.resumed) return;
+    final state = _userController.scrollKey.currentState;
+    if (state?.outerController.hasClients == true) {
+      state?.animToTop();
+      state?.outerController.animToTop();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context).colorScheme;
     final padding = MediaQuery.viewPaddingOf(context);
@@ -95,9 +122,8 @@ class _MemberPageState extends State<MemberPage> {
         () => switch (_userController.loadingState.value) {
           Loading() => m3eLoading,
           Success(:final response) => ExtendedNestedScrollView(
-            onlyOneScrollInBody: true,
             key: _userController.scrollKey,
-            scrollBehavior: const NoOverscrollIndicator(),
+            onlyOneScrollInBody: true,
             pinnedHeaderSliverHeightBuilder: () =>
                 kToolbarHeight + MediaQuery.viewPaddingOf(context).top,
             headerSliverBuilder: (context, innerBoxIsScrolled) {
@@ -151,6 +177,7 @@ class _MemberPageState extends State<MemberPage> {
                           SizedBox(
                             height: 45,
                             child: TabBar(
+                              labelPadding: .zero,
                               controller: _userController.tabController,
                               tabs: _userController.tabs,
                               onTap: _userController.onTapTab,
@@ -588,7 +615,6 @@ class _MemberPageState extends State<MemberPage> {
   ];
 
   Widget get _buildBody => tabBarView(
-    hitTestBehavior: .translucent,
     controller: _userController.tabController,
     children: _userController.tab2!.map((item) {
       return switch (item.param!) {
@@ -718,6 +744,18 @@ class _MemberPageState extends State<MemberPage> {
       );
     } else if (Platform.isAndroid) {
       _createShortcutAndroid();
+    } else if (OS.isHarmony) {
+      final images = switch (_userController.loadingState.value) {
+        Success(:final response) => response?.images,
+        _ => null,
+      };
+      HarmonyChannel.addUpToDesktop(
+        mid: _mid.toString(),
+        name: _userController.username ?? '',
+        avatar: '${_userController.userAvatar!}@150w_150h_10q.webp'.http2https,
+        topPhoto: '${images?.imgUrl}@400h_20q.webp'.http2https,
+      );
+      SmartDialog.showToast("加载中，最近投稿信息可能存在延时");
     }
   }
 

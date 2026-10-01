@@ -18,11 +18,11 @@ import 'package:PiliPlus/utils/platform_utils.dart';
 import 'package:PiliPlus/utils/theme_utils.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart' as web;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:material_ui/material_ui.dart';
 
 class LoginPageController extends GetxController
     with GetSingleTickerProviderStateMixin {
@@ -534,6 +534,8 @@ class LoginPageController extends GetxController
                     data['token_info'],
                     data['cookie_info']['cookies'],
                   );
+                  // 登录成功，通知系统将本次账号密码保存到密码保险箱
+                  TextInput.finishAutofillContext(shouldSave: true);
                   Get
                     ..back()
                     ..back();
@@ -554,6 +556,8 @@ class LoginPageController extends GetxController
       }
       SmartDialog.showToast('正在保存身份信息');
       await setAccount(data['token_info'], data['cookie_info']['cookies']);
+      // 登录成功，通知系统将本次账号密码保存到密码保险箱（OHOS/Android/iOS）
+      TextInput.finishAutofillContext(shouldSave: true);
       Get.back();
     } else {
       // handle login result

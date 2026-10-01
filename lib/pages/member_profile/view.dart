@@ -1,4 +1,4 @@
-import 'dart:io' show File;
+﻿import 'dart:io' show File;
 
 import 'package:PiliPlus/common/constants.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
@@ -7,6 +7,7 @@ import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/http/constants.dart';
 import 'package:PiliPlus/http/init.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/models/common/image_type.dart';
 import 'package:PiliPlus/models/common/member/profile_type.dart';
 import 'package:PiliPlus/models/user/info.dart';
 import 'package:PiliPlus/models_new/account_myinfo/data.dart';
@@ -24,12 +25,12 @@ import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:dio/dio.dart';
 import 'package:easy_debounce/easy_throttle.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart' show LengthLimitingTextInputFormatter;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:mime/mime.dart';
 
 class EditProfilePage extends StatefulWidget {
@@ -142,7 +143,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
               child: NetworkImgLayer(
                 width: 55,
                 height: 55,
-                type: .avatar,
+                type: ImageType.avatar,
                 src: response.face,
               ),
             ),
@@ -508,6 +509,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 aspectRatioLockEnabled: true,
                 resetAspectRatioEnabled: false,
                 aspectRatioPickerButtonHidden: true,
+              ),
+              // 鸿蒙化image_croppper修复，只能使用WebUiSettings
+              WebUiSettings(
+                context: context,
+                presentStyle: WebPresentStyle.dialog,
+                size: const CropperSize(
+                  width: 520,
+                  height: 520,
+                ),
               ),
             ],
           );

@@ -1,4 +1,4 @@
-import 'package:PiliPlus/common/widgets/scroll_physics.dart' show tabBarView;
+import 'package:PiliPlus/common/widgets/scroll_physics.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/models/common/dynamic/dynamics_type.dart';
 import 'package:PiliPlus/models/common/dynamic/up_panel_position.dart';
@@ -11,8 +11,8 @@ import 'package:PiliPlus/pages/dynamics_tab/view.dart';
 import 'package:PiliPlus/pages/main/controller.dart';
 import 'package:PiliPlus/utils/extension/get_ext.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
-import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart' hide DraggableScrollableSheet;
+import 'package:get/get.dart';
 
 class DynamicsPage extends StatefulWidget {
   const DynamicsPage({super.key});
@@ -30,34 +30,35 @@ class _DynamicsPageState extends CommonPageState<DynamicsPage>
   @override
   bool get wantKeepAlive => true;
 
-  Widget _createDynamicBtn(ColorScheme colorScheme, {bool isRight = true}) =>
-      Container(
-        width: 34,
-        height: 34,
-        margin: isRight ? const .only(right: 16) : const .only(left: 16),
-        child: IconButton(
-          tooltip: '发布动态',
-          style: ButtonStyle(
-            padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-            backgroundColor: WidgetStatePropertyAll(
-              colorScheme.secondaryContainer,
-            ),
-          ),
-          onPressed: () => CreateDynPanel.onCreateDyn(context),
-          icon: Icon(
-            Icons.add,
-            size: 18,
-            color: colorScheme.onSecondaryContainer,
+  Widget _createDynamicBtn(ThemeData theme, {bool isRight = true}) => Center(
+    child: Container(
+      width: 34,
+      height: 34,
+      margin: EdgeInsets.only(left: !isRight ? 16 : 0, right: isRight ? 16 : 0),
+      child: IconButton(
+        tooltip: '发布动态',
+        style: ButtonStyle(
+          padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+          backgroundColor: WidgetStatePropertyAll(
+            theme.colorScheme.secondaryContainer,
           ),
         ),
-      );
+        onPressed: () => CreateDynPanel.onCreateDyn(context),
+        icon: Icon(
+          Icons.add,
+          size: 18,
+          color: theme.colorScheme.onSecondaryContainer,
+        ),
+      ),
+    ),
+  );
 
-  Widget upPanelPart(ColorScheme colorScheme) {
+  Widget upPanelPart(ThemeData theme) {
     final isTop = upPanelPosition == .top;
     final needBg = upPanelPosition.index > 2;
     return Material(
       type: needBg ? .canvas : .transparency,
-      color: needBg ? colorScheme.surface : null,
+      color: needBg ? theme.colorScheme.surface : null,
       child: SizedBox(
         width: isTop ? null : 64,
         height: isTop ? 76 : null,
@@ -116,13 +117,13 @@ class _DynamicsPageState extends CommonPageState<DynamicsPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final colorScheme = ColorScheme.of(context);
+    final theme = Theme.of(context);
 
     Widget? drawer;
     Widget? endDrawer;
 
     Widget? leading;
-    Widget actions;
+    List<Widget>? actions;
 
     Widget child = tabBarView(
       controller: _dynamicsController.tabController,
@@ -132,80 +133,76 @@ class _DynamicsPageState extends CommonPageState<DynamicsPage>
     );
 
     switch (upPanelPosition) {
-      case .top:
+      case UpPanelPosition.top:
         child = Column(
           children: [
-            upPanelPart(colorScheme),
+            upPanelPart(theme),
             Expanded(child: child),
           ],
         );
-        actions = _createDynamicBtn(colorScheme);
-      case .leftFixed:
+        actions = [_createDynamicBtn(theme)];
+      case UpPanelPosition.leftFixed:
         child = Row(
           children: [
-            upPanelPart(colorScheme),
+            upPanelPart(theme),
             Expanded(child: child),
           ],
         );
-        actions = _createDynamicBtn(colorScheme);
-      case .rightFixed:
+        actions = [_createDynamicBtn(theme)];
+      case UpPanelPosition.rightFixed:
         child = Row(
           children: [
             Expanded(child: child),
-            upPanelPart(colorScheme),
+            upPanelPart(theme),
           ],
         );
-        actions = _createDynamicBtn(colorScheme);
-      case .leftDrawer:
-        drawer = upPanelPart(colorScheme);
-        actions = _createDynamicBtn(colorScheme);
-        leading = const DrawerButton();
-      case .rightDrawer:
-        endDrawer = upPanelPart(colorScheme);
-        leading = _createDynamicBtn(colorScheme, isRight: false);
-        actions = const EndDrawerButton();
+        actions = [_createDynamicBtn(theme)];
+      case UpPanelPosition.leftDrawer:
+        drawer = upPanelPart(theme);
+        actions = [_createDynamicBtn(theme)];
+      case UpPanelPosition.rightDrawer:
+        endDrawer = upPanelPart(theme);
+        leading = _createDynamicBtn(theme, isRight: false);
     }
 
     return Scaffold(
-      primary: false,
       resizeToAvoidBottomInset: false,
       backgroundColor: Colors.transparent,
-      appBar: PreferredSize(
-        preferredSize: const .fromHeight(50),
-        child: Row(
-          children: [
-            ?leading,
-            Expanded(
-              child: TabBar(
-                dividerHeight: 0,
-                isScrollable: true,
-                tabAlignment: .start,
-                dividerColor: Colors.transparent,
-                labelColor: colorScheme.primary,
-                indicatorColor: colorScheme.primary,
-                controller: _dynamicsController.tabController,
-                unselectedLabelColor: colorScheme.onSurface,
-                labelStyle:
-                    TabBarTheme.of(context).labelStyle
-                        ?.copyWith(fontSize: 13) ??
-                    const TextStyle(fontSize: 13),
-                tabs: DynamicsTabType.values
-                    .map((e) => Tab(text: e.label))
-                    .toList(),
-                onTap: (index) {
-                  if (!_dynamicsController.tabController.indexIsChanging) {
-                    if (Pref.enableCurrentPageRefresh) {
-                      _dynamicsController.toTopAndRefresh();
-                    } else {
-                      _dynamicsController.animateToTop();
-                    }
-                  }
-                },
-              ),
-            ),
-            actions,
-          ],
+      appBar: AppBar(
+        primary: true, // 避让安全区
+        leading: leading,
+        leadingWidth: 50,
+        toolbarHeight: 50,
+        backgroundColor: Colors.transparent,
+        title: SizedBox(
+          height: 50,
+          child: TabBar(
+            dividerHeight: 0,
+            isScrollable: true,
+            tabAlignment: .center,
+            dividerColor: Colors.transparent,
+            labelColor: theme.colorScheme.primary,
+            indicatorColor: theme.colorScheme.primary,
+            controller: _dynamicsController.tabController,
+            unselectedLabelColor: theme.colorScheme.onSurface,
+            labelStyle:
+                TabBarTheme.of(context).labelStyle?.copyWith(fontSize: 13) ??
+                const TextStyle(fontSize: 13),
+            tabs: DynamicsTabType.values
+                .map((e) => Tab(text: e.label))
+                .toList(),
+            onTap: (index) {
+              if (!_dynamicsController.tabController.indexIsChanging) {
+                if (Pref.enableCurrentPageRefresh) {
+                  _dynamicsController.toTopAndRefresh();
+                } else {
+                  _dynamicsController.animateToTop();
+                }
+              }
+            },
+          ),
         ),
+        actions: actions,
       ),
       drawer: drawer,
       endDrawer: endDrawer,

@@ -15,9 +15,9 @@ import 'package:PiliPlus/utils/id_utils.dart';
 import 'package:PiliPlus/utils/theme_utils.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:material_ui/material_ui.dart';
 
 abstract final class ReplyUtils {
   static void onCheckReply({
@@ -95,6 +95,7 @@ abstract final class ReplyUtils {
 
     // CommAntifraud
     if (!isManual) {
+      // TODO(ohos): 上游用 Future.pause（Dart 3.13+），鸿蒙 Dart SDK(3.12) 暂不支持，先用 Future.delayed 等价替换
       await Future.delayed(const Duration(seconds: 8));
     }
     void showReplyCheckResult(
@@ -276,7 +277,7 @@ https://api.bilibili.com/x/v2/reply/reply?oid=$oid&pn=1&ps=20&root=$id&type=$typ
           if (data.replies.isNullOrEmpty) {
             break;
           }
-          int index = data.replies?.indexWhere((item) => item.rpid == id) ?? -1;
+          int index = data.replies!.indexWhere((item) => item.rpid == id);
           if (index == -1) {
             // not found
           } else {
@@ -303,7 +304,7 @@ https://api.bilibili.com/x/v2/reply/reply?oid=$oid&pn=1&ps=20&root=$id&type=$typ
           if (data.replies.isNullOrEmpty) {
             break;
           }
-          int index = data.replies?.indexWhere((item) => item.rpid == id) ?? -1;
+          int index = data.replies!.indexWhere((item) => item.rpid == id);
           if (index == -1) {
             // not found
           } else {

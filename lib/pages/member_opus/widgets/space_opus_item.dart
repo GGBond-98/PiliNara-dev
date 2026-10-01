@@ -1,5 +1,7 @@
+import 'package:PiliPlus/common/widgets/cached_layout_builder.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/common/widgets/stat/stat.dart';
+import 'package:PiliPlus/models/common/image_type.dart';
 import 'package:PiliPlus/models/common/stat_type.dart';
 import 'package:PiliPlus/models_new/space/space_opus/item.dart';
 import 'package:PiliPlus/utils/page_utils.dart';
@@ -17,22 +19,25 @@ class SpaceOpusItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasPic = item.cover?.url?.isNotEmpty == true;
     return Card(
-      shape: const RoundedRectangleBorder(borderRadius: .all(.circular(6))),
+      clipBehavior: Clip.hardEdge,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(6)),
+      ),
       child: InkWell(
         onTap: () => PageUtils.pushDynFromId(id: item.opusId!),
-        borderRadius: const .all(.circular(6)),
+        borderRadius: const BorderRadius.all(Radius.circular(6)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (hasPic)
               Stack(
                 children: [
-                  LayoutBuilder(
+                  CachedLayoutBuilder(
                     builder: (context, constraints) => NetworkImgLayer(
                       width: constraints.maxWidth,
                       height: constraints.maxWidth * item.cover!.ratio,
                       src: item.cover!.url,
-                      borderRadius: const .vertical(top: .circular(6)),
+                      type: ImageType.emote,
                       quality: 60,
                     ),
                   ),

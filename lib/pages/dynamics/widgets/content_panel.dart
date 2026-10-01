@@ -1,19 +1,18 @@
 // 内容
 import 'package:PiliPlus/common/widgets/custom_icon.dart';
 import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
+import 'package:PiliPlus/common/widgets/flutter/text/text.dart' as custom_text;
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/common/widgets/image_grid/image_grid_view.dart';
 import 'package:PiliPlus/common/widgets/selection_text.dart';
-import 'package:PiliPlus/common/widgets/text_more/text_more.dart';
+import 'package:PiliPlus/common/widgets/text_selection_toolbar.dart';
 import 'package:PiliPlus/models/dynamics/result.dart';
 import 'package:PiliPlus/pages/dynamics/widgets/rich_node_panel.dart';
 import 'package:PiliPlus/utils/extension/iterable_ext.dart';
-import 'package:PiliPlus/utils/extension/selectable_region_ext.dart';
 import 'package:PiliPlus/utils/page_utils.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
-import 'package:collection/collection.dart' show IterableExtension;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:get/get.dart';
@@ -31,6 +30,9 @@ Widget content(
   TextSpan? richNodes = richNode(
     context,
     theme: theme,
+    floor: floor,
+    isDetail: isDetail,
+    isSave: isSave,
     item: item,
   );
   final moduleDynamic = item.modules.moduleDynamic;
@@ -90,12 +92,12 @@ Widget content(
                   contextMenuBuilder: text == null || text.isEmpty
                       ? null
                       : (_, state) => dynTextMenuBuilder(
-                          state,
-                          text,
-                          item.modules.moduleDynamic,
-                        ),
+                        state,
+                        text,
+                        moduleDynamic,
+                      ),
                 )
-              : TextMore.rich(
+              : custom_text.Text.rich(
                   style: floor == 1
                       ? const TextStyle(fontSize: 15)
                       : const TextStyle(fontSize: 14),

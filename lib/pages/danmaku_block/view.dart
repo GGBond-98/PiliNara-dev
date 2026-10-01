@@ -28,18 +28,11 @@ class DanmakuBlockPage extends StatefulWidget {
 class _DanmakuBlockPageState extends State<DanmakuBlockPage> {
   final DanmakuBlockController _controller = Get.put(DanmakuBlockController());
   late PlPlayerController plPlayerController;
-  late EdgeInsets padding;
 
   @override
   void initState() {
     super.initState();
     plPlayerController = Get.arguments as PlPlayerController;
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    padding = MediaQuery.viewPaddingOf(context);
   }
 
   @override
@@ -68,61 +61,49 @@ class _DanmakuBlockPageState extends State<DanmakuBlockPage> {
             ),
           ),
         ],
-      ),
-      body: Column(
-        children: [
-          TabBar(
-            controller: _controller.tabController,
-            tabs: DmBlockType.values
-                .map(
-                  (e) => Obx(
-                    () => Tab(
-                      text: '${e.label}(${_controller.rules[e.index].length})',
-                    ),
+        bottom: TabBar(
+          controller: _controller.tabController,
+          tabs: DmBlockType.values
+              .map(
+                (e) => Obx(
+                  () => Tab(
+                    text: '${e.label}(${_controller.rules[e.index].length})',
                   ),
-                )
-                .toList(),
-          ),
-          Expanded(
-            child: tabBarView(
-              controller: _controller.tabController,
-              children: DmBlockType.values
-                  .map(
-                    (e) => KeepAliveWrapper(
-                      child: Obx(
-                        () =>
-                            tabViewBuilder(e.index, _controller.rules[e.index]),
-                      ),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
-        ],
+                ),
+              )
+              .toList(),
+        ),
       ),
-      fab: Padding(
-        padding: .only(
-          right: kFloatingActionButtonMargin + padding.right,
-          bottom: kFloatingActionButtonMargin + padding.bottom,
-        ),
-        child: FloatingActionButton(
-          tooltip: '添加',
-          onPressed: () => _showAddDialog(
-            DmBlockType.values[_controller.tabController.index],
-          ),
-          child: const Icon(Icons.add),
-        ),
+      body: tabBarView(
+        controller: _controller.tabController,
+        children: DmBlockType.values
+            .map(
+              (e) => KeepAliveWrapper(
+                child: Obx(
+                  () => tabViewBuilder(e.index, _controller.rules[e.index]),
+                ),
+              ),
+            )
+            .toList(),
+      ),
+      fab: FloatingActionButton(
+        tooltip: '添加',
+        onPressed: () =>
+            _showAddDialog(DmBlockType.values[_controller.tabController.index]),
+        child: const Icon(Icons.add),
       ),
     );
   }
 
-  Widget tabViewBuilder(int tabIndex, List<SimpleRule> list) {
+  Widget tabViewBuilder(final int tabIndex, List<SimpleRule> list) {
     if (list.isEmpty) {
       return scrollableError;
     }
     return ListView.builder(
       itemCount: list.length,
-      padding: .only(bottom: padding.bottom + 100),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.viewPaddingOf(context).bottom + 100,
+      ),
       itemBuilder: (context, itemIndex) {
         final SimpleRule item = list[itemIndex];
         final child = iconButton(

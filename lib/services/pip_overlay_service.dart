@@ -5,7 +5,6 @@ import 'dart:math' show max, min;
 import 'package:PiliPlus/common/widgets/pip_control_button.dart';
 import 'package:PiliPlus/pages/video/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
-import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
 import 'package:PiliPlus/services/logger.dart';
 import 'package:PiliPlus/services/pip_transition_coordinator.dart';
 import 'package:PiliPlus/services/service_locator.dart';
@@ -965,39 +964,51 @@ class _PipWidgetState extends State<PipWidget>
                                         // 播放/暂停
                                         Expanded(
                                           child: Center(
-                                            child: Obx(() {
-                                              final controller =
-                                                  PipOverlayService
-                                                      .getSavedController<
-                                                        VideoDetailController
-                                                      >();
-                                              final plController =
-                                                  controller
-                                                      ?.plPlayerController;
-                                              final isPlaying =
-                                                  plController
-                                                          ?.playerStatus
-                                                          .value ==
-                                                      PlayerStatus.playing;
-                                              return PipControlButton(
-                                                targetSize: bottomControl,
-                                                onTap: () {
-                                                  _resetHideTimer();
-                                                  if (isPlaying) {
-                                                    plController?.pause();
-                                                  } else {
-                                                    plController?.play();
-                                                  }
-                                                },
-                                                icon: Icon(
-                                                  isPlaying
-                                                      ? Icons.pause
-                                                      : Icons.play_arrow,
-                                                  color: Colors.white,
-                                                  size: 30,
-                                                ),
-                                              );
-                                            }),
+                                            child: Builder(
+                                              builder: (context) {
+                                                final controller =
+                                                    PipOverlayService
+                                                        .getSavedController<
+                                                          VideoDetailController
+                                                        >();
+                                                final plController =
+                                                    controller
+                                                        ?.plPlayerController;
+                                                final player =
+                                                    plController
+                                                        ?.videoPlayerController;
+                                                return StreamBuilder<bool>(
+                                                  stream: player
+                                                      ?.stream
+                                                      .playing,
+                                                  initialData: player
+                                                      ?.state
+                                                      .playing,
+                                                  builder: (context, snapshot) {
+                                                    final isPlaying =
+                                                        snapshot.data ?? false;
+                                                    return PipControlButton(
+                                                      targetSize: bottomControl,
+                                                      onTap: () {
+                                                        _resetHideTimer();
+                                                        if (isPlaying) {
+                                                          plController?.pause();
+                                                        } else {
+                                                          plController?.play();
+                                                        }
+                                                      },
+                                                      icon: Icon(
+                                                        isPlaying
+                                                            ? Icons.pause
+                                                            : Icons.play_arrow,
+                                                        color: Colors.white,
+                                                        size: 30,
+                                                      ),
+                                                    );
+                                                  },
+                                                );
+                                              },
+                                            ),
                                           ),
                                         ),
                                         const SizedBox(width: 8),

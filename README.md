@@ -1,8 +1,52 @@
+# PiliNara 鸿蒙版（HarmonyOS / OpenHarmony）
+
+本分支是 [PiliNara](https://github.com/Starfallan/PiliNara) 的鸿蒙移植分支，鸿蒙平台适配层来自
+[dev4harmony/PiliPlus](https://github.com/dev4harmony/PiliPlus) 的 `ohos` 分支。
+
+> [!WARNING]
+> 本分支只做一件事：把 PiliNara 适配到鸿蒙。
+>
+> - 产品功能、界面与分支特性以 PiliNara 为准，鸿蒙侧不新增产品功能、不改变上游行为；
+> - 除鸿蒙平台相关的桥接代码（`ohos/`、`packages/`、`lib/harmony_adapt/`、`lib/media_kit_adapt/`、
+>   以及 `OS.isHarmony` 分支、挖孔/安全区、跨设备接续等调用点）之外，其余代码应尽量与 PiliNara 保持一致，
+>   以便后续继续同步上游。
+> - 目前仅保证 HarmonyOS 目标可编译、可运行到主要流程；未适配的功能见 `AGENT.md` 中的 TODO 清单。
+
+## 提 issue 注意事项
+
+- 请先查看[是否已存在类似 issue](https://github.com/Starfallan/PiliNara/issues?q=is%3Aissue)，
+  并确保问题属于**鸿蒙版特有问题**（即上游/安卓版本没有该问题）。
+- 与鸿蒙无关的功能问题请提到 PiliNara 上游。
+
+## 编译运行
+
+> [!TIP]
+> 当前项目编译 API 已经提升到了 26.0.0，请在华为官网下载最新的配套 IDE 和 SDK 使用，防止编译异常。
+
+- 1、配置鸿蒙 Flutter 3.44.9 环境，参考 [鸿蒙 flutter3.44.9](https://gitcode.com/CPF-Flutter/flutter_flutter/tree/oh-3.44.9-dev)；
+- 2、安装 DevEco Studio 与 HarmonyOS SDK（API 26），并配置好 `DEVECO_SDK_HOME`；
+- 3、用 vscode 打开本仓库，运行 `build hap` 任务或启动配置，
+  以确保应用内所需环境变量（`.vscode/env.json`）正确写入；
+- 4、应用包名为 `com.dev4harmony.pilinara`。
+
+若遇到类似 **Package not available (the pubspec for image_picker 1.1.2 from git has version 1.0.2).**
+这样的报错，可参考[这篇掘金](https://juejin.cn/post/7602936997175132212)。
+
+### 欢迎参与开发适配，让鸿蒙 PiliNara 更完善
+
+## 感谢
+
+- [PiliNara](https://github.com/Starfallan/PiliNara) 上游作者
+- PiliPlus [上游](https://github.com/bggRGjQaUbCoE/PiliPlus)
+- [dev4harmony/flutter-dev](https://github.com/orgs/dev4harmony/teams/flutter-dev) 成员
+- media_kit 适配者 [ErBW_s](https://github.com/ErBWs)
+- 所有开发者和贡献者
+
+# 以下是原上游项目README
+
 <div align="center">
     <img width="200" height="200" src="assets/images/logo/logo.png">
 </div>
-
-
 
 <div align="center">
     <h1>PiliNara</h1>
@@ -18,7 +62,6 @@
 <img src="assets/screenshots/main_screen.png" width="96%" alt="home" />
 <br/>
 </div>
-
 
 <br/>
 
@@ -184,7 +227,7 @@ Fork特性：
 - [x] 超分辨率
 - [x] 会员彩色弹幕
 - [x] 播放全部/继续播放/倒序播放
-- [x] Cookie登录
+- [x] Cookie 登录
 - [x] 显示视频分段信息
 - [x] 调节字幕大小
 - [x] 调节全屏弹幕大小
@@ -206,7 +249,7 @@ Fork特性：
 - [x] 三连动画
 - [x] 番剧三连
 - [x] 带图评论
-- [x] 视频TAG
+- [x] 视频 TAG
 - [x] 筛选搜索
 - [x] 转发动态
 - [x] 合集图片
@@ -227,8 +270,8 @@ Fork特性：
 - [x] 评论显示
 - [x] 亮度调节
 - [x] 视频播放
-- [x] 视频staff
-- [x] 防止bottomsheet遮挡全屏视频
+- [x] 视频 staff
+- [x] 防止 bottomsheet 遮挡全屏视频
 - [x] 其他
 
 ## fix
@@ -240,7 +283,7 @@ Fork特性：
 
 ## 功能
 
-- [x] 推荐视频列表(app端)
+- [x] 推荐视频列表(app 端)
 - [x] 最热视频列表
 - [x] 热门直播
 - [x] 番剧列表
@@ -257,7 +300,6 @@ Fork特性：
   - [x] 观看记录
   - [x] 我的收藏
   - [x] 站内私信
-  
 - [x] 动态相关
   - [x] 全部、投稿、番剧分类查看
   - [x] 动态评论查看
@@ -270,7 +312,7 @@ Fork特性：
   - [x] 垂直方向上滑全屏、下滑退出全屏
   - [x] 水平方向手势快进/快退
   - [x] 全屏方向设置
-  - [x] 倍速选择/长按2倍速
+  - [x] 倍速选择/长按 2 倍速
   - [x] 硬件加速（视机型而定）
   - [x] 画质选择（高清画质未解锁）
   - [x] 音质选择（视视频而定）
@@ -279,16 +321,14 @@ Fork特性：
   - [x] 字幕
   - [x] 记忆播放
   - [x] 视频比例：高度/宽度适应、填充、包含等
-     
 - [x] 搜索相关
   - [x] 热搜
   - [x] 搜索历史
   - [x] 默认搜索词
   - [x] 投稿、番剧、直播间、用户搜索
   - [x] 视频搜索排序、按时长筛选
-    
 - [x] 视频详情页相关
-  - [x] 视频选集(分p)切换
+  - [x] 视频选集(分 p)切换
   - [x] 点赞、投币、收藏/取消收藏
   - [x] 相关视频查看
   - [x] 评论用户身份标识
@@ -298,7 +338,7 @@ Fork特性：
   - [x] 评论笔记图片查看、保存
 
 - [x] 设置相关
-  - [x] 画质、音质、解码方式预设      
+  - [x] 画质、音质、解码方式预设
   - [x] 图片质量设定
   - [x] 主题模式：亮色/暗色/跟随系统
   - [x] 震动反馈(可选)
@@ -311,7 +351,7 @@ Fork特性：
 
 ## 下载
 
-可以通过右侧release进行下载或拉取代码到本地进行编译
+可以通过右侧 release 进行下载或拉取代码到本地进行编译
 
 ### Arch Linux
 
@@ -352,7 +392,6 @@ yay -S pilinara-bin
 本仓库做了一些自用修改，感谢原作者的开源精神。
 
 感谢使用
-
 
 <br/>
 

@@ -1,5 +1,6 @@
 import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/badge.dart';
+import 'package:PiliPlus/common/widgets/cached_layout_builder.dart';
 import 'package:PiliPlus/common/widgets/image/image_save.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/models_new/space/space_fav/list.dart';
@@ -8,8 +9,8 @@ import 'package:PiliPlus/utils/bili_utils.dart';
 import 'package:PiliPlus/utils/num_utils.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
 import 'package:PiliPlus/utils/utils.dart';
-import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:get/get.dart';
 
 class MemberFavItem extends StatelessWidget {
   const MemberFavItem({super.key, required this.item, this.onDelete});
@@ -64,7 +65,7 @@ class MemberFavItem extends StatelessWidget {
                 children: [
                   AspectRatio(
                     aspectRatio: Style.aspectRatio,
-                    child: LayoutBuilder(
+                    child: CachedLayoutBuilder(
                       builder: (context, constraints) => NetworkImgLayer(
                         src: item.cover,
                         width: constraints.maxWidth,

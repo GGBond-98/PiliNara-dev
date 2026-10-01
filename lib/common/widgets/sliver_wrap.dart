@@ -61,10 +61,14 @@ class _Row {
 class RenderSliverFixedWrap extends RenderSliverMultiBoxAdaptor {
   RenderSliverFixedWrap({
     required super.childManager,
-    required this._mainAxisExtent,
-    this._spacing = 0.0,
-    this._runSpacing = 0.0,
-  }) : assert(_mainAxisExtent > 0.0 && _mainAxisExtent.isFinite);
+    required double mainAxisExtent,
+    double spacing = 0.0,
+    double runSpacing = 0.0,
+  }) : _spacing = spacing,
+       _runSpacing = runSpacing,
+       _mainAxisExtent = mainAxisExtent {
+    assert(mainAxisExtent > 0.0 && mainAxisExtent.isFinite);
+  }
 
   double _mainAxisExtent;
   double get mainAxisExtent => _mainAxisExtent;

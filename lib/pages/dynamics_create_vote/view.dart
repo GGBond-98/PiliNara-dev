@@ -1,9 +1,8 @@
-import 'dart:io' show File;
+﻿import 'dart:io' show File;
 
 import 'package:PiliPlus/common/widgets/button/icon_button.dart';
 import 'package:PiliPlus/common/widgets/flutter/popup_menu.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
-import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/time_picker.dart';
 import 'package:PiliPlus/models/dynamics/vote_model.dart';
 import 'package:PiliPlus/pages/dynamics_create_vote/controller.dart';
@@ -11,12 +10,13 @@ import 'package:PiliPlus/utils/date_utils.dart';
 import 'package:PiliPlus/utils/extension/file_ext.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
 import 'package:PiliPlus/utils/utils.dart';
+import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:easy_debounce/easy_throttle.dart';
+import 'package:material_ui/material_ui.dart' hide showTimePicker;
 import 'package:flutter/services.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:material_ui/material_ui.dart' hide showTimePicker;
 
 class CreateVotePage extends StatefulWidget {
   const CreateVotePage({super.key, this.voteId});
@@ -152,7 +152,7 @@ class _CreateVotePageState extends State<CreateVotePage> {
                           top: 4,
                           bottom: 4,
                         ),
-                        visualDensity: .standard,
+                        visualDensity: VisualDensity.standard,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         foregroundColor: theme.colorScheme.onSurfaceVariant,
                         backgroundColor: theme.colorScheme.onInverseSurface,

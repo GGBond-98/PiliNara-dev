@@ -46,14 +46,14 @@ class SliverHotKeyword extends StatelessWidget {
                   child: Padding(
                     padding: const .only(left: 2, right: 10),
                     child: Tooltip(
-                      message: i.keyword,
+                      message: i.showName,
                       child: Row(
                         children: [
                           Flexible(
                             child: Padding(
                               padding: const .fromLTRB(6, 5, 0, 5),
                               child: Text(
-                                i.keyword!,
+                                i.showName,
                                 overflow: TextOverflow.ellipsis,
                                 maxLines: 1,
                                 style: const TextStyle(fontSize: 14),
@@ -135,10 +135,12 @@ class _RenderHotKeywordGrid extends RenderBox
         ContainerRenderObjectMixin<RenderBox, MultiChildLayoutParentData>,
         RenderBoxContainerDefaultsMixin<RenderBox, MultiChildLayoutParentData> {
   _RenderHotKeywordGrid({
-    required this._crossAxisCount,
-    required this._mainAxisSpacing,
-    required this._crossAxisSpacing,
-  });
+    required int crossAxisCount,
+    required double mainAxisSpacing,
+    required double crossAxisSpacing,
+  }) : _crossAxisCount = crossAxisCount,
+       _mainAxisSpacing = mainAxisSpacing,
+       _crossAxisSpacing = crossAxisSpacing;
 
   int _crossAxisCount;
   int get crossAxisCount => _crossAxisCount;

@@ -1,11 +1,6 @@
+import 'dart:async' show unawaited;
 import 'dart:io' show File, Platform;
 import 'dart:ui' show PlatformDispatcher;
-
-import 'package:get/get.dart';
-import 'package:PiliPlus/pages/video/introduction/ugc/controller.dart';
-import 'package:PiliPlus/pages/video/introduction/pgc/controller.dart';
-import 'package:PiliPlus/pages/video/introduction/local/controller.dart';
-import 'package:PiliPlus/pages/audio/controller.dart';
 
 import 'package:PiliPlus/common/constants.dart';
 import 'package:PiliPlus/grpc/bilibili/app/listener/v1.pb.dart' show DetailItem;
@@ -14,14 +9,21 @@ import 'package:PiliPlus/models_new/live/live_room_info_h5/data.dart';
 import 'package:PiliPlus/models_new/pgc/pgc_info_model/episode.dart';
 import 'package:PiliPlus/models_new/video/video_detail/data.dart';
 import 'package:PiliPlus/models_new/video/video_detail/page.dart';
+import 'package:PiliPlus/pages/audio/controller.dart';
+import 'package:PiliPlus/pages/video/introduction/local/controller.dart';
+import 'package:PiliPlus/pages/video/introduction/pgc/controller.dart';
+import 'package:PiliPlus/pages/video/introduction/ugc/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
+import 'package:PiliPlus/plugin/pl_player/models/play_repeat.dart';
 import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
 import 'package:PiliPlus/utils/android/bindings.g.dart';
+import 'package:PiliPlus/utils/cache_manager.dart';
 import 'package:PiliPlus/utils/image_utils.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:collection/collection.dart';
+import 'package:get/get.dart';
 import 'package:path/path.dart' as path;
 
 Future<VideoPlayerServiceHandler> initAudioService() {
@@ -40,15 +42,34 @@ Future<VideoPlayerServiceHandler> initAudioService() {
   );
 }
 
+typedef _StatusConfig = (
+  PlayerStatus status,
+  bool isBuffering,
+  bool isLive,
+  double speed,
+);
+
 class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
+  VideoPlayerServiceHandler({bool? enableBackgroundPlay})
+    : enableBackgroundPlay = enableBackgroundPlay ?? Pref.enableBackgroundPlay;
+
+  factory VideoPlayerServiceHandler.local() =>
+      VideoPlayerServiceHandler(enableBackgroundPlay: false);
+
   static final List<MediaItem> _item = [];
-  bool enableBackgroundPlay = Pref.enableBackgroundPlay;
+  bool enableBackgroundPlay;
+
+  /// 当前循环模式（同步给系统播控中心/实况窗显示与切换）
+  AudioServiceRepeatMode repeatMode = AudioServiceRepeatMode.none;
+
+  /// 实况窗/播控中心切换循环模式时回调给当前播放页
+  Future<void> Function(PlayRepeat repeat)? onRepeatModeChanged;
 
   Future<void>? Function()? onPlay;
   Future<void>? Function()? onPause;
   Future<void>? Function(Duration position)? onSeek;
-  Future<void>? Function()? onSkipToNext;
-  Future<void>? Function()? onSkipToPrevious;
+  Future<bool>? Function()? onSkipToNext;
+  Future<bool>? Function()? onSkipToPrevious;
   String? currentHeroTag;
 
   void _clearCallbacks() {
@@ -86,6 +107,27 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
     currentHeroTag = null;
     _clearCallbacks();
     _emitIdleState();
+  }
+
+  @override
+  Future<void> play() {
+    return onPlay?.call() ??
+        PlPlayerController.playIfExists() ??
+        Future.syncValue(null);
+  }
+
+  @override
+  Future<void> pause() {
+    return onPause?.call() ??
+        PlPlayerController.pauseIfExists() ??
+        Future.syncValue(null);
+  }
+
+  @override
+  Future<void> seek(Duration position) {
+    return onSeek?.call(position) ??
+        PlPlayerController.seekToIfExists(position, isSeek: false) ??
+        Future.syncValue(null);
   }
 
   @override
@@ -142,32 +184,6 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
     } catch (_) {}
   }
 
-  @override
-  Future<void> play() {
-    return onPlay?.call() ??
-        PlPlayerController.playIfExists() ??
-        Future.syncValue(null);
-    // player.play();
-  }
-
-  @override
-  Future<void> pause() {
-    return onPause?.call() ?? PlPlayerController.pauseIfExists();
-    // player.pause();
-  }
-
-  @override
-  Future<void> seek(Duration position) {
-    playbackState.add(
-      playbackState.value.copyWith(
-        updatePosition: position,
-      ),
-    );
-    return (onSeek?.call(position) ??
-        PlPlayerController.seekToIfExists(position, isSeek: false));
-    // await player.seekTo(position);
-  }
-
   void setMediaItem(MediaItem newMediaItem) {
     if (!enableBackgroundPlay) return;
     // if (kDebugMode) {
@@ -205,28 +221,62 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
     return false;
   }
 
-  void setPlaybackState(
+  Duration? _lastPos;
+  _StatusConfig? _lastConfig;
+  void onUpdateState(
     PlayerStatus status,
     bool isBuffering,
-    bool isLive,
-  ) {
-    if (!enableBackgroundPlay ||
-        _item.isEmpty ||
-        !PlPlayerController.instanceExists()) {
+    bool isLive, {
+    required Duration position,
+    required double speed,
+    String? debugLabel,
+  }) {
+    if (!enableBackgroundPlay || _item.isEmpty) {
       return;
     }
 
-    final AudioProcessingState processingState;
-    if (status.isCompleted) {
-      processingState = AudioProcessingState.completed;
-    } else if (isBuffering) {
-      processingState = AudioProcessingState.buffering;
-    } else {
-      processingState = AudioProcessingState.ready;
+    if (onPlay != null && debugLabel == 'onVideoPaused') return;
+
+    final newConfig = (status, isBuffering, isLive, speed);
+    if (_lastConfig == newConfig) {
+      if (_lastPos != null) {
+        final pos = position.inSeconds;
+        final lastPos = _lastPos!.inSeconds;
+        _lastPos = position;
+        if (pos == lastPos && pos != 0) return;
+      }
     }
+    _lastConfig = newConfig;
 
-    final playing = status.isPlaying;
+    final AudioProcessingState processingState;
+    final bool playing;
+    switch (status) {
+      case .completed:
+        playing = false;
+        processingState = .completed;
+      case .playing:
+        playing = true;
+        processingState = isBuffering ? .buffering : .ready;
+      case .paused:
+        playing = isBuffering;
+        processingState = isBuffering ? .buffering : .ready;
+    }
+    _updateState(
+      processingState,
+      playing,
+      isLive,
+      position: position,
+      speed: speed,
+    );
+  }
 
+  void _updateState(
+    AudioProcessingState state,
+    bool playing,
+    bool isLive, {
+    required Duration position,
+    required double speed,
+  }) {
     final hasEpisodes = _hasEpisodes();
 
     final controls = <MediaControl>[
@@ -268,11 +318,12 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
 
     playbackState.add(
       playbackState.value.copyWith(
-        processingState: isBuffering
-            ? AudioProcessingState.buffering
-            : processingState,
+        processingState: state,
+        updatePosition: position,
+        speed: speed,
         controls: controls,
         androidCompactActionIndices: compactIndices,
+        repeatMode: repeatMode,
         playing: playing,
         systemActions: {
           MediaAction.seek,
@@ -294,11 +345,28 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
     }
   }
 
-  void onStatusChange(PlayerStatus status, bool isBuffering, isLive) {
-    if (!enableBackgroundPlay) return;
+  /// 应用侧循环模式变化时同步给播控中心
+  void updateRepeatMode(PlayRepeat repeat) {
+    final mode = switch (repeat) {
+      PlayRepeat.singleCycle => AudioServiceRepeatMode.one,
+      PlayRepeat.listCycle => AudioServiceRepeatMode.all,
+      _ => AudioServiceRepeatMode.none,
+    };
+    if (mode == repeatMode) return;
+    repeatMode = mode;
+    playbackState.add(playbackState.value.copyWith(repeatMode: mode));
+  }
 
-    if (_item.isEmpty) return;
-    setPlaybackState(status, isBuffering, isLive);
+  @override
+  Future<void> setRepeatMode(AudioServiceRepeatMode repeatMode) async {
+    this.repeatMode = repeatMode;
+    playbackState.add(playbackState.value.copyWith(repeatMode: repeatMode));
+    final repeat = switch (repeatMode) {
+      AudioServiceRepeatMode.one => PlayRepeat.singleCycle,
+      AudioServiceRepeatMode.all => PlayRepeat.listCycle,
+      _ => PlayRepeat.listOrder,
+    };
+    await onRepeatModeChanged?.call(repeat);
   }
 
   void onVideoDetailChange(
@@ -314,19 +382,49 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
     //   debugPrint('当前调用栈为：');
     //   debugPrint(StackTrace.current);
     // }
-    if (!PlPlayerController.instanceExists()) return;
     if (data == null) return;
+    unawaited(
+      _handleVideoDetailChange(
+        data,
+        cid,
+        herotag,
+        artist: artist,
+        cover: cover,
+      ),
+    );
+  }
 
+  /// 优先复用项目图片缓存（cached_network_image_ce）中的封面文件并返回
+  /// file:// 本地 URI：audio_service 对 file:// 的 artUri 会直接使用本地
+  /// 文件，不会再走其内置的 flutter_cache_manager（DefaultCacheManager）
+  /// 重新下载并写入 libCachedImageData。仅当该封面从未被加载过时才经
+  /// CE 缓存管理器下载一次，之后均命中缓存。
+  ///
+  /// 使用与详情页播放器封面相同的压缩率（硬编码为60）
+  /// 生成 URL：两者一致才能命中同一缓存 key，复用详情页已缓存的封面文件。
+  Future<Uri> _artUriFromCache(String? cover) async {
+    var url = ImageUtils.thumbnailUrl(cover, 60);
+    if (url.isEmpty) return Uri();
     // Windows SMTC 弹窗由 shell 进程渲染，仅支持系统内置解码器，WebP 会静默不显示，
     // 将图床处理参数的 .webp 后缀换为 .jpg（由图床转码），其他平台维持原状
-    Uri getUri(String? cover) {
-      String url = ImageUtils.safeThumbnailUrl(cover);
-      if (Platform.isWindows && url.contains('@') && url.endsWith('.webp')) {
-        url = '${url.substring(0, url.length - '.webp'.length)}.jpg';
-      }
+    if (Platform.isWindows && url.contains('@') && url.endsWith('.webp')) {
+      url = '${url.substring(0, url.length - '.webp'.length)}.jpg';
+    }
+    try {
+      final file = await CacheManager.manager.getSingleFile(url);
+      return file.absolute.uri;
+    } catch (_) {
       return Uri.parse(url);
     }
+  }
 
+  Future<void> _handleVideoDetailChange(
+    dynamic data,
+    int cid,
+    String herotag, {
+    String? artist,
+    String? cover,
+  }) async {
     late final id = '$cid$herotag';
     final MediaItem mediaItem;
     switch (data) {
@@ -338,7 +436,7 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
             title: current?.part ?? '',
             artist: data.owner?.name,
             duration: Duration(seconds: current?.duration ?? 0),
-            artUri: getUri(data.pic),
+            artUri: await _artUriFromCache(data.pic),
           );
         } else {
           mediaItem = MediaItem(
@@ -346,7 +444,7 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
             title: data.title ?? '',
             artist: data.owner?.name,
             duration: Duration(seconds: data.duration ?? 0),
-            artUri: getUri(data.pic),
+            artUri: await _artUriFromCache(data.pic),
           );
         }
       case EpisodeItem():
@@ -357,15 +455,17 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
           duration: data.from == 'pugv'
               ? Duration(seconds: data.duration ?? 0)
               : Duration(milliseconds: data.duration ?? 0),
-          artUri: getUri(data.cover),
+          artUri: await _artUriFromCache(data.cover),
         );
       case RoomInfoH5Data():
         mediaItem = MediaItem(
           id: id,
           title: data.roomInfo?.title ?? '',
           artist: data.anchorInfo?.baseInfo?.uname,
-          artUri: getUri(data.roomInfo?.cover),
+          artUri: await _artUriFromCache(data.roomInfo?.cover),
           isLive: true,
+          // 设置直播间时长为0，解决鸿蒙因时长为null而不显示媒体组件
+          duration: Duration.zero,
         );
       case Part():
         mediaItem = MediaItem(
@@ -373,7 +473,7 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
           title: data.part ?? '',
           artist: artist,
           duration: Duration(seconds: data.duration ?? 0),
-          artUri: getUri(cover),
+          artUri: await _artUriFromCache(cover),
         );
       case DetailItem(:final arc):
         mediaItem = MediaItem(
@@ -381,27 +481,25 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
           title: arc.title,
           artist: data.owner.name,
           duration: Duration(seconds: arc.duration.toInt()),
-          artUri: getUri(arc.cover),
+          artUri: await _artUriFromCache(arc.cover),
         );
       case BiliDownloadEntryInfo():
         final coverFile = File(
           path.join(data.entryDirPath, PathUtils.coverName),
         );
-        final uri = coverFile.existsSync()
+        final artUri = coverFile.existsSync()
             ? coverFile.absolute.uri
-            : getUri(data.cover);
+            : await _artUriFromCache(data.cover);
         mediaItem = MediaItem(
           id: id,
           title: data.showTitle,
           artist: data.ownerName,
           duration: Duration(milliseconds: data.totalTimeMilli),
-          artUri: uri,
+          artUri: artUri,
         );
       default:
         return;
     }
-    // if (kDebugMode) debugPrint("exist: ${PlPlayerController.instanceExists()}");
-    if (!PlPlayerController.instanceExists()) return;
     _item
       ..removeWhere((item) => item.id == id || item.id.endsWith(herotag))
       ..add(mediaItem);
@@ -411,15 +509,31 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
   void onVideoDetailDispose(String herotag) {
     if (!enableBackgroundPlay) return;
 
-    _item.removeWhere((item) => item.id.endsWith(herotag));
+    if (_item.isNotEmpty) {
+      _item.removeWhere((item) => item.id.endsWith(herotag));
+    }
     if (currentHeroTag != herotag) {
+      // 鸿蒙后台播放：仍有其他播放页的媒体项时回退到最近的一项
+      if (_item.isNotEmpty) {
+        setMediaItem(_item.last);
+        playbackState.add(
+          playbackState.value.copyWith(processingState: .ready, playing: false),
+        );
+      }
       return;
     }
     _clearCurrentSession(clearItems: false);
   }
 
+  void clearIfNeeded() {
+    if (!enableBackgroundPlay) return;
+    if (_item.isEmpty) clear();
+  }
+
   void clear() {
     if (!enableBackgroundPlay) return;
+    _lastPos = null;
+    _lastConfig = null;
     _clearCurrentSession();
   }
 
@@ -431,9 +545,7 @@ class VideoPlayerServiceHandler extends BaseAudioHandler with SeekHandler {
     }
 
     playbackState.add(
-      playbackState.value.copyWith(
-        updatePosition: position,
-      ),
+      playbackState.value.copyWith(updatePosition: position),
     );
   }
 }

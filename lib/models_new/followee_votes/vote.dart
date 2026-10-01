@@ -12,11 +12,12 @@ class FolloweeVote extends Owner {
 
   FolloweeVote({
     required super.mid,
-    required this._name,
-    required this._face,
+    required String name,
+    required String face,
     required this.votes,
     required this.ctime,
-  });
+  }) : _name = name,
+       _face = face;
 
   factory FolloweeVote.fromJson(Map<String, dynamic> json) => FolloweeVote(
     mid: json['uid'],

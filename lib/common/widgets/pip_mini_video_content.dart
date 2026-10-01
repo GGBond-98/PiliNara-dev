@@ -1,3 +1,4 @@
+import 'package:PiliPlus/media_kit_adapt/simple_video.dart';
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
 import 'package:PiliPlus/services/pip_transition_coordinator.dart';
 import 'package:material_ui/material_ui.dart';

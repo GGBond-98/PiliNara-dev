@@ -1,11 +1,12 @@
-import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
-import 'package:PiliPlus/common/widgets/scroll_physics.dart' show tabBarView;
+﻿import 'package:PiliPlus/common/widgets/scroll_physics.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
+import 'package:PiliPlus/models/common/live/live_search_type.dart';
 import 'package:PiliPlus/pages/live_search/child/view.dart';
 import 'package:PiliPlus/pages/live_search/controller.dart';
 import 'package:PiliPlus/utils/utils.dart';
-import 'package:get/get.dart';
+import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:get/get.dart';
 
 class LiveSearchPage extends StatefulWidget {
   const LiveSearchPage({super.key});
@@ -40,7 +41,7 @@ class _LiveSearchPageState extends State<LiveSearchPage> {
           textAlignVertical: TextAlignVertical.center,
           decoration: InputDecoration(
             hintText: '搜索房间或主播',
-            visualDensity: .standard,
+            visualDensity: VisualDensity.standard,
             border: InputBorder.none,
             suffixIcon: IconButton(
               tooltip: '清空',
@@ -94,11 +95,11 @@ class _LiveSearchPageState extends State<LiveSearchPage> {
                     children: [
                       LiveSearchChildPage(
                         controller: _controller.roomCtr,
-                        searchType: .room,
+                        searchType: LiveSearchType.room,
                       ),
                       LiveSearchChildPage(
                         controller: _controller.userCtr,
-                        searchType: .user,
+                        searchType: LiveSearchType.user,
                       ),
                     ],
                   ),

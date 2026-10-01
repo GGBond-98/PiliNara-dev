@@ -6,7 +6,6 @@ import 'package:PiliPlus/common/widgets/pip_control_button.dart';
 import 'package:PiliPlus/common/widgets/pip_mini_video_content.dart';
 import 'package:PiliPlus/pages/live_room/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
-import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
 import 'package:PiliPlus/services/pip_transition_coordinator.dart';
 import 'package:PiliPlus/services/service_locator.dart';
 import 'package:PiliPlus/utils/device_utils.dart';
@@ -791,34 +790,48 @@ class _LivePipWidgetState extends State<LivePipWidget>
                                         // 播放/暂停
                                         Expanded(
                                           child: Center(
-                                            child: Obx(() {
-                                              final isPlaying =
-                                                  widget
-                                                      .plPlayerController
-                                                      .playerStatus
-                                                      .value ==
-                                                  PlayerStatus.playing;
-                                              return PipControlButton(
-                                                targetSize: bottomControl,
-                                                onTap: () {
-                                                  _resetHideTimer();
-                                                  if (isPlaying) {
-                                                    widget.plPlayerController
-                                                        .pause();
-                                                  } else {
-                                                    widget.plPlayerController
-                                                        .play();
-                                                  }
-                                                },
-                                                icon: Icon(
-                                                  isPlaying
-                                                      ? Icons.pause
-                                                      : Icons.play_arrow,
-                                                  color: Colors.white,
-                                                  size: 30,
-                                                ),
-                                              );
-                                            }),
+                                            child: Builder(
+                                              builder: (context) {
+                                                final player =
+                                                    widget
+                                                        .plPlayerController
+                                                        .videoPlayerController;
+                                                return StreamBuilder<bool>(
+                                                  stream: player
+                                                      ?.stream
+                                                      .playing,
+                                                  initialData: player
+                                                      ?.state
+                                                      .playing,
+                                                  builder: (context, snapshot) {
+                                                    final isPlaying =
+                                                        snapshot.data ?? false;
+                                                    return PipControlButton(
+                                                      targetSize: bottomControl,
+                                                      onTap: () {
+                                                        _resetHideTimer();
+                                                        if (isPlaying) {
+                                                          widget
+                                                              .plPlayerController
+                                                              .pause();
+                                                        } else {
+                                                          widget
+                                                              .plPlayerController
+                                                              .play();
+                                                        }
+                                                      },
+                                                      icon: Icon(
+                                                        isPlaying
+                                                            ? Icons.pause
+                                                            : Icons.play_arrow,
+                                                        color: Colors.white,
+                                                        size: 30,
+                                                      ),
+                                                    );
+                                                  },
+                                                );
+                                              },
+                                            ),
                                           ),
                                         ),
                                         // 刷新:直播卡死自救;低频操作降为

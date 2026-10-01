@@ -1,3 +1,4 @@
+import 'package:PiliPlus/harmony_adapt/harmony_channel.dart';
 import 'package:PiliPlus/common/widgets/custom_icon.dart';
 import 'package:PiliPlus/http/fav.dart';
 import 'package:PiliPlus/http/loading_state.dart';
@@ -185,6 +186,7 @@ class MineController extends CommonDataController<FavFolderData, FavFolderData>
     }
     final newVal = !anonymity.value;
     anonymity.value = newVal;
+    HarmonyChannel.setShellBarsHidden(true);
     if (newVal) {
       SmartDialog.dismiss();
       SmartDialog.show<bool>(
@@ -192,6 +194,9 @@ class MineController extends CommonDataController<FavFolderData, FavFolderData>
         usePenetrate: true,
         displayTime: const Duration(seconds: 2),
         alignment: Alignment.bottomCenter,
+        onDismiss: () {
+          HarmonyChannel.setShellBarsHidden(false);
+        },
         builder: (context) {
           final theme = Theme.of(context);
           final style = TextStyle(
@@ -269,6 +274,9 @@ class MineController extends CommonDataController<FavFolderData, FavFolderData>
         usePenetrate: true,
         displayTime: const Duration(seconds: 1),
         alignment: Alignment.bottomCenter,
+        onDismiss: () {
+          HarmonyChannel.setShellBarsHidden(false);
+        },
         builder: (context) {
           final theme = Theme.of(context);
           return ColoredBox(
@@ -299,6 +307,7 @@ class MineController extends CommonDataController<FavFolderData, FavFolderData>
     themeType.value = newVal;
     GStorage.setting.put(SettingBoxKey.themeMode, newVal.index);
     Get.changeThemeMode(ThemeUtils.themeMode = newVal.toThemeMode);
+    ThemeUtils.syncColorModeToNative();
   }
 
   void push(String name) {
@@ -319,7 +328,7 @@ class MineController extends CommonDataController<FavFolderData, FavFolderData>
   @override
   Future<void> onRefresh({bool isManual = true}) {
     if (!accountService.isLogin.value) {
-      return Future.syncValue(null);
+      return Future.value(null);
     }
     queryUserInfo();
     queryHistory();

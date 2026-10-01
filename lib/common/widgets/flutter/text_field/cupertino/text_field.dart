@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// ignore_for_file: prefer_initializing_formals
-
 /// @docImport 'package:flutter/material.dart';
 library;
 
@@ -11,18 +9,20 @@ import 'dart:math' as math;
 import 'dart:ui' as ui show BoxHeightStyle, BoxWidthStyle;
 
 import 'package:PiliPlus/common/widgets/flutter/text_field/controller.dart';
+import 'package:PiliPlus/common/widgets/flutter/text_field/cupertino/adaptive_text_selection_toolbar.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/cupertino/spell_check_suggestions_toolbar.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/editable_text.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/spell_check.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/system_context_menu.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/text_selection.dart';
-import 'package:cupertino_ui/cupertino_ui.dart'
+import 'package:flutter/cupertino.dart'
     hide
         EditableText,
         EditableTextState,
         CupertinoSpellCheckSuggestionsToolbar,
         EditableTextContextMenuBuilder,
         SystemContextMenu,
+        CupertinoAdaptiveTextSelectionToolbar,
         SpellCheckConfiguration,
         TextSelectionGestureDetectorBuilderDelegate,
         TextSelectionGestureDetectorBuilder,
@@ -294,7 +294,6 @@ class CupertinoRichTextField extends StatefulWidget {
     this.stylusHandwritingEnabled =
         EditableText.defaultStylusHandwritingEnabled,
     this.enableIMEPersonalizedLearning = true,
-    this.enableInlinePrediction,
     this.contextMenuBuilder = _defaultContextMenuBuilder,
     this.spellCheckConfiguration,
     this.magnifierConfiguration,
@@ -440,7 +439,6 @@ class CupertinoRichTextField extends StatefulWidget {
     this.scribbleEnabled = true,
     this.stylusHandwritingEnabled = true,
     this.enableIMEPersonalizedLearning = true,
-    this.enableInlinePrediction,
     this.contextMenuBuilder = _defaultContextMenuBuilder,
     this.spellCheckConfiguration,
     this.magnifierConfiguration,
@@ -801,9 +799,6 @@ class CupertinoRichTextField extends StatefulWidget {
   /// {@macro flutter.services.TextInputConfiguration.enableIMEPersonalizedLearning}
   final bool enableIMEPersonalizedLearning;
 
-  /// {@macro flutter.services.TextInputConfiguration.enableInlinePrediction}
-  final bool? enableInlinePrediction;
-
   /// {@macro flutter.widgets.editableText.contentInsertionConfiguration}
   final ContentInsertionConfiguration? contentInsertionConfiguration;
 
@@ -825,9 +820,8 @@ class CupertinoRichTextField extends StatefulWidget {
         editableTextState: editableTextState,
       );
     }
-    return CupertinoAdaptiveTextSelectionToolbar.buttonItems(
-      anchors: editableTextState.contextMenuAnchors,
-      buttonItems: editableTextState.contextMenuButtonItems,
+    return CupertinoAdaptiveTextSelectionToolbar.editableText(
+      editableTextState: editableTextState,
     );
   }
 
@@ -1123,13 +1117,6 @@ class CupertinoRichTextField extends StatefulWidget {
         ),
       )
       ..add(
-        DiagnosticsProperty<bool?>(
-          'enableInlinePrediction',
-          enableInlinePrediction,
-          defaultValue: null,
-        ),
-      )
-      ..add(
         DiagnosticsProperty<SpellCheckConfiguration>(
           'spellCheckConfiguration',
           spellCheckConfiguration,
@@ -1156,17 +1143,24 @@ class CupertinoRichTextField extends StatefulWidget {
               ValueNotifier<MagnifierInfo> magnifierInfo,
             ) {
               switch (defaultTargetPlatform) {
-                case TargetPlatform.android:
-                case TargetPlatform.iOS:
-                  return CupertinoTextMagnifier(
-                    controller: controller,
-                    magnifierInfo: magnifierInfo,
-                  );
+                // ↓↓↓ 适配flutter 3.32.4-ohos-0.0.1
+                // case TargetPlatform.android:
+                // case TargetPlatform.iOS:
+                //   return CupertinoTextMagnifier(
+                //     controller: controller,
+                //     magnifierInfo: magnifierInfo,
+                //   );
                 case TargetPlatform.fuchsia:
                 case TargetPlatform.linux:
                 case TargetPlatform.macOS:
                 case TargetPlatform.windows:
                   return null;
+                default:
+                  return CupertinoTextMagnifier(
+                    controller: controller,
+                    magnifierInfo: magnifierInfo,
+                  );
+                // ↑↑↑ 适配flutter 3.32.4-ohos-0.0.1
               }
             },
       );
@@ -1242,6 +1236,7 @@ class _CupertinoRichTextFieldState extends State<CupertinoRichTextField>
   @override
   void didUpdateWidget(CupertinoRichTextField oldWidget) {
     super.didUpdateWidget(oldWidget);
+
     if (widget.focusNode != oldWidget.focusNode) {
       (oldWidget.focusNode ?? _focusNode)?.removeListener(_handleFocusChanged);
       (widget.focusNode ?? _focusNode)?.addListener(_handleFocusChanged);
@@ -1315,28 +1310,35 @@ class _CupertinoRichTextFieldState extends State<CupertinoRichTextField>
     }
 
     switch (defaultTargetPlatform) {
-      case TargetPlatform.iOS:
-      case TargetPlatform.macOS:
-      case TargetPlatform.linux:
-      case TargetPlatform.windows:
-      case TargetPlatform.fuchsia:
-      case TargetPlatform.android:
+      // ↓↓↓ 适配flutter 3.32.4-ohos-0.0.1
+      // case TargetPlatform.iOS:
+      // case TargetPlatform.macOS:
+      // case TargetPlatform.linux:
+      // case TargetPlatform.windows:
+      // case TargetPlatform.fuchsia:
+      // case TargetPlatform.android:
+      default:
+        // ↑↑↑ 适配flutter 3.32.4-ohos-0.0.1
         if (cause == SelectionChangedCause.longPress) {
           _editableText.bringIntoView(selection.extent);
         }
     }
 
     switch (defaultTargetPlatform) {
-      case TargetPlatform.iOS:
-      case TargetPlatform.fuchsia:
-      case TargetPlatform.android:
-        break;
+      // ↓↓↓ 适配flutter 3.32.4-ohos-0.0.1
+      // case TargetPlatform.iOS:
+      // case TargetPlatform.fuchsia:
+      // case TargetPlatform.android:
+      //   break;
       case TargetPlatform.macOS:
       case TargetPlatform.linux:
       case TargetPlatform.windows:
         if (cause == SelectionChangedCause.drag) {
           _editableText.hideToolbar();
         }
+      default:
+        break;
+      // ↑↑↑ 适配flutter 3.32.4-ohos-0.0.1
     }
   }
 
@@ -1547,10 +1549,11 @@ class _CupertinoRichTextFieldState extends State<CupertinoRichTextField>
     VoidCallback? handleDidGainAccessibilityFocus;
     VoidCallback? handleDidLoseAccessibilityFocus;
     switch (defaultTargetPlatform) {
-      case TargetPlatform.iOS:
-      case TargetPlatform.android:
-      case TargetPlatform.fuchsia:
-        textSelectionControls ??= cupertinoTextSelectionHandleControls;
+    // ↓↓↓ 适配flutter 3.32.4-ohos-0.0.1
+      // case TargetPlatform.iOS:
+      // case TargetPlatform.android:
+      // case TargetPlatform.fuchsia:
+      //   textSelectionControls ??= cupertinoTextSelectionHandleControls;
       case TargetPlatform.linux:
       case TargetPlatform.macOS:
       case TargetPlatform.windows:
@@ -1565,6 +1568,9 @@ class _CupertinoRichTextFieldState extends State<CupertinoRichTextField>
         handleDidLoseAccessibilityFocus = () {
           _effectiveFocusNode.unfocus();
         };
+      default:
+        textSelectionControls ??= cupertinoTextSelectionHandleControls;
+    // ↑↑↑ 适配flutter 3.32.4-ohos-0.0.1
     }
 
     final bool enabled = widget.enabled;
@@ -1750,7 +1756,6 @@ class _CupertinoRichTextFieldState extends State<CupertinoRichTextField>
             scribbleEnabled: widget.scribbleEnabled,
             stylusHandwritingEnabled: widget.stylusHandwritingEnabled,
             enableIMEPersonalizedLearning: widget.enableIMEPersonalizedLearning,
-            enableInlinePrediction: widget.enableInlinePrediction,
             contentInsertionConfiguration: widget.contentInsertionConfiguration,
             contextMenuBuilder: widget.contextMenuBuilder,
             spellCheckConfiguration: spellCheckConfiguration,

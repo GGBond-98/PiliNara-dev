@@ -2,7 +2,7 @@ import 'dart:io' show File;
 import 'dart:typed_data' show Uint8List;
 
 import 'package:PiliPlus/utils/platform_utils.dart' show PlatformUtils;
-import 'package:file_picker/file_picker.dart';
+import 'package:file_picker_ohos/file_picker_ohos.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
 abstract final class StorageUtils {
@@ -13,18 +13,19 @@ abstract final class StorageUtils {
     FileType type = FileType.custom,
   }) async {
     try {
-      final path = await FilePicker.saveFile(
+      // 鸿蒙适配 fork（br_v10.2.0_ohos）仅提供 FilePicker.platform 实例方法
+      final path = await FilePicker.platform.saveFile(
         allowedExtensions: allowedExtensions,
         type: type,
         fileName: name,
-        bytes: PlatformUtils.isDesktop ? Uint8List(0) : bytes,
+        bytes: PlatformUtils.isDesktop ? null : bytes,
       );
       if (path == null) {
         SmartDialog.showToast("取消保存");
         return;
       }
       if (PlatformUtils.isDesktop) {
-        await File(path.toFilePath()).writeAsBytes(bytes);
+        await File(path).writeAsBytes(bytes);
       }
       SmartDialog.showToast("已保存");
     } catch (e) {

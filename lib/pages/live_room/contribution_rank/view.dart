@@ -2,7 +2,7 @@ import 'package:PiliPlus/common/widgets/flutter/refresh_indicator.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/loading_widget.dart';
-import 'package:PiliPlus/common/widgets/scroll_physics.dart' show tabBarView;
+import 'package:PiliPlus/common/widgets/scroll_physics.dart';
 import 'package:PiliPlus/common/widgets/view_sliver_safe_area.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/models/common/live/live_contribution_rank_type.dart';
@@ -127,9 +127,9 @@ class _ContributionRankTypeState extends State<_ContributionRankType>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final showScore = widget.type == .online_rank;
+    final showScore = widget.type == LiveContributionRankType.online_rank;
     return Material(
-      type: .transparency,
+      type: MaterialType.transparency,
       child: refreshIndicator(
         onRefresh: _controller.onRefresh,
         child: CustomScrollView(
@@ -216,7 +216,7 @@ class _Item extends StatelessWidget {
     return InkWell(
       onTap: () => Get.toNamed('/member?mid=${item.uid}'),
       child: Padding(
-        padding: const .only(left: 10, top: 9, bottom: 8, right: 16),
+        padding: const EdgeInsets.only(left: 10, top: 9, bottom: 8, right: 16),
         child: Row(
           spacing: 10,
           children: [
@@ -225,8 +225,8 @@ class _Item extends StatelessWidget {
               child: Center(
                 child: Text(
                   '${index + 1}',
-                  textAlign: .center,
-                  textScaler: .noScaling,
+                  textAlign: TextAlign.center,
+                  textScaler: TextScaler.noScaling,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: ColourUtils.index2Color(index, colorScheme.outline),

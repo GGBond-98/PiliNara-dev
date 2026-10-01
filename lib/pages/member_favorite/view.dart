@@ -8,8 +8,8 @@ import 'package:PiliPlus/models_new/space/space_fav/data.dart';
 import 'package:PiliPlus/pages/member_favorite/controller.dart';
 import 'package:PiliPlus/pages/member_favorite/widget/item.dart';
 import 'package:PiliPlus/utils/grid.dart';
-import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:get/get.dart';
 
 class MemberFavorite extends StatefulWidget {
   const MemberFavorite({
@@ -46,6 +46,7 @@ class _MemberFavoriteState extends State<MemberFavorite>
     super.build(context);
     final theme = Theme.of(context);
     return refreshIndicator(
+      isClampingScrollPhysics: true,
       onRefresh: _controller.onRefresh,
       child: CustomScrollView(
         physics: _FavScrollPhysics(controller: _controller),
@@ -200,7 +201,7 @@ class _MemberFavoriteState extends State<MemberFavorite>
 
   Widget _buildLoadMoreItem(ThemeData theme, bool isFav) {
     return Padding(
-      padding: const .only(top: 7),
+      padding: const EdgeInsets.only(top: 7),
       child: InkWell(
         onTap: () {
           if (isFav) {
@@ -211,7 +212,7 @@ class _MemberFavoriteState extends State<MemberFavorite>
         },
         child: Container(
           height: 40,
-          alignment: .center,
+          alignment: Alignment.center,
           child: Text(
             '查看更多内容',
             textAlign: TextAlign.center,

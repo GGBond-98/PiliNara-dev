@@ -1,9 +1,6 @@
-import 'package:PiliPlus/common/widgets/animated_height.dart';
-import 'package:PiliPlus/common/widgets/draggable_sheet/dyn.dart';
+import 'package:PiliPlus/common/widgets/flutter/draggable_scrollable_sheet.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/text_field.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
-import 'package:PiliPlus/common/widgets/scroll_physics.dart'
-    show platformClampingPhysics;
 import 'package:PiliPlus/http/dynamics.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/models/dynamics/result.dart';
@@ -13,9 +10,9 @@ import 'package:PiliPlus/pages/emote/controller.dart';
 import 'package:PiliPlus/pages/emote/view.dart';
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/request_utils.dart';
+import 'package:material_ui/material_ui.dart' hide TextField;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:material_ui/material_ui.dart' hide TextField;
 
 class RepostPanel extends CommonRichTextPubPage {
   const RepostPanel({
@@ -29,7 +26,6 @@ class RepostPanel extends CommonRichTextPubPage {
     this.pic,
     this.title,
     this.uname,
-    super.autofocus = false,
   });
 
   // video
@@ -47,15 +43,15 @@ class RepostPanel extends CommonRichTextPubPage {
   State<RepostPanel> createState() => _RepostPanelState();
 }
 
-class _RepostPanelState extends CommonRichTextPubPageState<RepostPanel>
-    with SingleTickerProviderStateMixin {
-  bool _expanded = false;
+class _RepostPanelState extends CommonRichTextPubPageState<RepostPanel> {
+  late bool _isMax = false;
+  late bool _isExpanded = false;
+
+  late final _key = GlobalKey();
 
   late final String? _pic;
   late final String _text;
   late final String? _uname;
-
-  static const _durtion = Duration(milliseconds: 300);
 
   @override
   void initState() {
@@ -92,17 +88,18 @@ class _RepostPanelState extends CommonRichTextPubPageState<RepostPanel>
   @override
   Widget build(BuildContext context) {
     Widget page([ScrollController? scrollController]) => Column(
-      crossAxisAlignment: .start,
-      mainAxisSize: _expanded ? .max : .min,
+      key: _isMax ? _key : null,
+      mainAxisSize: _isMax ? MainAxisSize.max : MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (!_expanded) const SizedBox(height: 10),
+        if (!_isMax) const SizedBox(height: 10),
         _buildAppBar(),
-        if (_expanded) ...[
+        if (_isMax) ...[
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
               controller: scrollController,
-              physics: platformClampingPhysics,
+              physics: const ClampingScrollPhysics(),
               children: _buildEditPanel(),
             ),
           ),
@@ -115,29 +112,32 @@ class _RepostPanelState extends CommonRichTextPubPageState<RepostPanel>
       ],
     );
 
-    return AnimatedHeight(
-      vsync: this,
-      expand: _expanded,
-      curve: Curves.ease,
-      duration: _durtion,
-      child: _expanded
-          ? DynDraggableScrollableSheet(
-              snap: true,
-              expand: false,
-              minChildSize: 0,
-              maxChildSize: 1,
-              initialChildSize: 1,
-              snapSizes: const [1],
-              builder: (context, scrollController) => page(scrollController),
-            )
-          : page(),
-    );
+    Widget child() => _isMax
+        ? DynDraggableScrollableSheet(
+            snap: true,
+            expand: false,
+            initialChildSize: 1,
+            minChildSize: 0,
+            maxChildSize: 1,
+            snapSizes: const [1],
+            builder: (context, scrollController) => page(scrollController),
+          )
+        : page();
+
+    return _isExpanded
+        ? child()
+        : AnimatedSize(
+            alignment: Alignment.topCenter,
+            curve: Curves.ease,
+            duration: const Duration(milliseconds: 300),
+            child: child(),
+          );
   }
 
   List<Widget> _buildEditPanel() => [
     Padding(
-      padding: const .symmetric(horizontal: 16),
-      child: _expanded
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: _isMax
           ? _buildEditWidget()
           : DecoratedBox(
               decoration: BoxDecoration(
@@ -204,10 +204,11 @@ class _RepostPanelState extends CommonRichTextPubPageState<RepostPanel>
   Widget _buildEditPlaceHolder() => GestureDetector(
     behavior: HitTestBehavior.opaque,
     onTap: () {
-      setState(() => _expanded = true);
-      Future.delayed(_durtion, () {
+      setState(() => _isMax = true);
+      Future.delayed(const Duration(milliseconds: 300), () {
         if (mounted) {
           focusNode.requestFocus();
+          setState(() => _isExpanded = true);
         }
       });
     },
@@ -230,7 +231,6 @@ class _RepostPanelState extends CommonRichTextPubPageState<RepostPanel>
       controller: editController,
       minLines: 4,
       maxLines: null,
-      autofocus: false,
       focusNode: focusNode,
       onSubmitted: onSubmitted,
       readOnly: readOnly.value,
@@ -247,7 +247,7 @@ class _RepostPanelState extends CommonRichTextPubPageState<RepostPanel>
     ),
   );
 
-  Widget _buildAppBar() => !_expanded
+  Widget _buildAppBar() => !_isMax
       ? Row(
           children: [
             const SizedBox(width: 16),

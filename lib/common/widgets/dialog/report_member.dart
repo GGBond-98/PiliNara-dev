@@ -59,11 +59,11 @@ Future<void> showMemberReportDialog(
         ),
         content: SingleChildScrollView(
           child: Column(
-            mainAxisSize: .min,
-            crossAxisAlignment: .start,
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Padding(
-                padding: .only(left: 18),
+                padding: EdgeInsets.only(left: 18),
                 child: Text('举报内容（必选，可多选）'),
               ),
               ...List.generate(
@@ -109,12 +109,12 @@ Future<void> showMemberReportDialog(
                 ),
               ),
               const Padding(
-                padding: .only(left: 18),
+                padding: EdgeInsets.only(left: 18),
                 child: Text('举报理由（单选，非必选）'),
               ),
               Builder(
                 builder: (context) => Column(
-                  crossAxisAlignment: .start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: List.generate(
                     _reasonV2.length,
                     (index) {

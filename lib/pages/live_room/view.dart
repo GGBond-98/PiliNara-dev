@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui';
@@ -7,15 +8,16 @@ import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/button/icon_button.dart';
 import 'package:PiliPlus/common/widgets/custom_icon.dart';
 import 'package:PiliPlus/common/widgets/extra_hittest_stack.dart';
-import 'package:PiliPlus/common/widgets/flutter/popup_menu.dart';
+import 'package:PiliPlus/common/widgets/flutter/page/page_view.dart';
 import 'package:PiliPlus/common/widgets/flutter/pop_scope.dart';
+import 'package:PiliPlus/common/widgets/flutter/popup_menu.dart';
 import 'package:PiliPlus/common/widgets/gesture/horizontal_drag_gesture_recognizer.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/common/widgets/keep_alive_wrapper.dart';
 import 'package:PiliPlus/common/widgets/route_aware_mixin.dart';
-import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
-import 'package:PiliPlus/common/widgets/scroll_physics.dart'
-    show tabBarScrollPhysics;
+import 'package:PiliPlus/common/widgets/scroll_physics.dart';
+import 'package:PiliPlus/harmony_adapt/harmony_channel.dart';
+import 'package:PiliPlus/models/common/image_type.dart';
 import 'package:PiliPlus/models/common/live/live_contribution_rank_type.dart';
 import 'package:PiliPlus/models_new/live/live_room_info_h5/data.dart';
 import 'package:PiliPlus/models_new/live/live_superchat/item.dart';
@@ -54,11 +56,13 @@ import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:PiliPlus/utils/theme_utils.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:cached_network_image_ce/cached_network_image.dart';
-import 'package:canvas_danmaku/danmaku_screen.dart';
+import 'package:canvas_danmaku/canvas_danmaku.dart';
+import 'package:floating/floating.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:material_ui/material_ui.dart' hide PageView;
+import 'package:os_type/os_type.dart';
 import 'package:screen_brightness_platform_interface/screen_brightness_platform_interface.dart';
 
 const baseWhite = Color(0xFFEEEEEE);
@@ -85,6 +89,7 @@ class _LiveRoomPageState extends State<LiveRoomPage>
   late final GlobalKey chatKey = GlobalKey();
   late final GlobalKey scKey = GlobalKey();
   late final GlobalKey playerKey = GlobalKey();
+  Worker? _pipModeWorker;
 
   // 归位动画进行中：页面播放器以透明占位先行布局（供量取目标矩形），
   // 恢复握手完成后亮出，期间小窗是唯一可见端
@@ -151,6 +156,9 @@ class _LiveRoomPageState extends State<LiveRoomPage>
   void initState() {
     super.initState();
     addObserverMobile(this);
+    // 页面顶部是深色播放器：自由多窗的装饰栏按钮切浅色风格，否则浅色
+    // 模式下深色按钮不可见
+    HarmonyChannel.holdDecorDark(this);
     final args = Get.arguments;
 
     // 解析当前请求进入的房间号
@@ -217,6 +225,11 @@ class _LiveRoomPageState extends State<LiveRoomPage>
         hideSystemBar();
       }
     }
+    // 画中画状态翻转时强制重建，防止 PiP 结束时无视口变化导致页面滞留在
+    // 画中画布局（参见视频页同名逻辑）。
+    _pipModeWorker = ever(plPlayerController.pipModeRx, (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -240,7 +253,12 @@ class _LiveRoomPageState extends State<LiveRoomPage>
 
   @override
   Future<void> didPopNext() async {
+    // 从覆盖页面返回直播页时重新进入沉浸模式：移除安全边距或仍处于全屏时
+    if (plPlayerController.removeSafeArea || plPlayerController.isFullScreen.value) {
+      hideSystemBar();
+    }
     addObserverMobile(this);
+    HarmonyChannel.holdDecorDark(this);
 
     // 如果返回当前页面时应用内小窗正在运行，且房间号匹配，说明是从正在小窗播放的页面返回
     if (LivePipOverlayService.isInPipMode) {
@@ -335,7 +353,8 @@ class _LiveRoomPageState extends State<LiveRoomPage>
 
   @override
   void didPushNext() {
-    removeObserverMobile(this);
+    WidgetsBinding.instance.removeObserver(this);
+    HarmonyChannel.releaseDecorDark(this);
     plPlayerController.removeStatusLister(playerListener);
 
     if (plPlayerController.playerStatus.isPlaying &&
@@ -376,7 +395,9 @@ class _LiveRoomPageState extends State<LiveRoomPage>
       videoPlayerServiceHandler?.onVideoDetailDispose(heroTag);
     }
     removeObserverMobile(this);
-    if (Platform.isAndroid && !plPlayerController.setSystemBrightness) {
+    HarmonyChannel.releaseDecorDark(this);
+    if ((Platform.isAndroid || OS.isHarmony) &&
+        !plPlayerController.setSystemBrightness) {
       ScreenBrightnessPlatform.instance.resetApplicationScreenBrightness();
     }
     if (!isInLivePip && !_isEnteringPipMode) {
@@ -410,6 +431,11 @@ class _LiveRoomPageState extends State<LiveRoomPage>
         plPlayerController.showDanmaku = true;
       }
     } else if (state == .paused) {
+      // 画中画（PiP）模式下进入后台会收到 paused，但视频仍然可见，不应
+      // 强制关闭弹幕：小窗是否显示弹幕由“画中画不加载弹幕”设置
+      // （pipNoDanmaku）决定，否则 PiP 内弹幕会被强制停止而非跟随设置。
+      // 与 PLVideoPlayer.didChangeAppLifecycleState 的 PiP 豁免保持一致。
+      if (plPlayerController.isPipMode) return;
       _liveRoomController.cancelLiveTimer();
       plPlayerController
         ..showDanmaku = false
@@ -471,7 +497,12 @@ class _LiveRoomPageState extends State<LiveRoomPage>
     Widget player = Obx(
       key: playerKey,
       () {
-        if (_liveRoomController.isLoaded.value && plPlayerController.isLive) {
+        // videoController 必须一起判断：取流成功不等于播放器已就绪
+        // （setDataSource 内部失败/播放器已被释放时仍然会置 isLoaded），
+        // 此时挂载 PLVideoPlayer 会在内部空断言里崩掉整个直播页。
+        if (_liveRoomController.isLoaded.value &&
+            plPlayerController.isLive &&
+            plPlayerController.videoController != null) {
           final roomInfoH5 = _liveRoomController.roomInfoH5.value;
           return PLVideoPlayer(
             maxWidth: width,
@@ -480,6 +511,17 @@ class _LiveRoomPageState extends State<LiveRoomPage>
             fill: fill,
             alignment: alignment,
             plPlayerController: plPlayerController,
+            // 不在播放器内部避让：本页的 Scaffold 已经让出过一次。
+            // Scaffold 给 AppBar 那一格的高度是
+            // `appBar.preferredSize + (primary ? padding.top : 0)`
+            // （见 SDK scaffold.dart 的 _appBarMaxHeight），全屏时 AppBar 虽然
+            // toolbarHeight 为 0、自身 primary 也关了，但 Scaffold 的 primary
+            // 仍为 true，这一格照样占 padding.top，正文（播放器）整体下移；
+            // _buildPP/_buildPH 里 videoHeight 减掉的正是这一段。隐藏状态栏后
+            // padding.top 即摄像头挖孔高度（鸿蒙见 HarmonyChannel.cutoutInsets，
+            // 与 Android 语义一致），播放器已经整个在挖孔之下，再传 topInset
+            // 就是同一个值避让两次。
+            topInset: null,
             headerControl: LiveHeaderControl(
               key: _liveRoomController.headerKey,
               title: roomInfoH5?.roomInfo?.title,
@@ -732,7 +774,10 @@ class _LiveRoomPageState extends State<LiveRoomPage>
                 );
               },
             ),
-          ScaffoldLayout(
+          Scaffold(
+            primary: !plPlayerController.removeSafeArea,
+            resizeToAvoidBottomInset: false,
+            backgroundColor: Colors.transparent,
             appBar: isWindowMode && isFullScreen && !isPortrait
                 ? null
                 : _buildAppBar(isFullScreen),
@@ -859,7 +904,9 @@ class _LiveRoomPageState extends State<LiveRoomPage>
 
   PreferredSizeWidget _buildAppBar(bool isFullScreen) {
     return AppBar(
-      primary: !plPlayerController.removeSafeArea,
+      // 全屏时不要吃掉状态栏高度（primary 默认会加 SafeArea），
+      // 否则状态栏显隐会带动整个正文位移，直播画面跳动。
+      primary: isFullScreen ? false : !plPlayerController.removeSafeArea,
       toolbarHeight: isFullScreen ? 0 : null,
       backgroundColor: Colors.transparent,
       foregroundColor: Colors.white,
@@ -884,7 +931,7 @@ class _LiveRoomPageState extends State<LiveRoomPage>
                       NetworkImgLayer(
                         width: 34,
                         height: 34,
-                        type: .avatar,
+                        type: ImageType.avatar,
                         src: roomInfoH5.anchorInfo!.baseInfo!.face,
                       ),
                       Flexible(
@@ -894,7 +941,7 @@ class _LiveRoomPageState extends State<LiveRoomPage>
                           children: [
                             Row(
                               spacing: 10,
-                              mainAxisSize: .min,
+                              mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Flexible(
@@ -911,7 +958,7 @@ class _LiveRoomPageState extends State<LiveRoomPage>
                             ),
                             Row(
                               spacing: 10,
-                              mainAxisSize: .min,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 _liveRoomController.watchedWidget,
                                 _liveRoomController.timeWidget,
@@ -1067,7 +1114,7 @@ class _LiveRoomPageState extends State<LiveRoomPage>
     return Padding(
       padding: .only(bottom: 12, top: isPortrait ? 12 : 0),
       child: _liveRoomController.showSuperChat
-          ? PageView(
+          ? PageView<CustomHorizontalDragGestureRecognizer>(
               key: pageKey,
               controller: _liveRoomController.pageController,
               physics: tabBarScrollPhysics,
@@ -1298,9 +1345,10 @@ class _BorderIndicator extends LeafRenderObjectWidget {
 
 class _RenderBorderIndicator extends RenderBox {
   _RenderBorderIndicator({
-    required this._radius,
-    required this._isLeft,
-  });
+    required Radius radius,
+    required bool isLeft,
+  }) : _radius = radius,
+       _isLeft = isLeft;
 
   Radius _radius;
   Radius get radius => _radius;

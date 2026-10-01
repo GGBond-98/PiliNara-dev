@@ -1,5 +1,5 @@
-import 'package:flutter/rendering.dart' show RenderProxyBox, BoxHitTestResult;
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/rendering.dart' show RenderProxyBox, BoxHitTestResult;
 
 class CustomHeightWidget extends SingleChildRenderObjectWidget {
   const CustomHeightWidget({
@@ -34,9 +34,10 @@ class CustomHeightWidget extends SingleChildRenderObjectWidget {
 
 class RenderCustomHeightWidget extends RenderProxyBox {
   RenderCustomHeightWidget({
-    this._height,
-    required this._offset,
-  });
+    double? height,
+    required Offset offset,
+  }) : _height = height,
+       _offset = offset;
 
   double? _height;
   double? get height => _height;

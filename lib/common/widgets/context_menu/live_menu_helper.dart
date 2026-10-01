@@ -2,19 +2,22 @@ part of 'package:PiliPlus/pages/live_room/superchat/superchat_card.dart';
 
 Widget scMenuBuilder(
   BuildContext context,
-  SelectableRegionState state,
+  EditableTextState editableTextState,
 ) {
-  final buttonItems = state.contextMenuButtonItems;
-  if (state.isUncollapsed) {
+  final buttonItems = editableTextState.contextMenuButtonItems;
+  final selection = editableTextState.textEditingValue.selection;
+  final String? text = selection.isValid && !selection.isCollapsed
+      ? selection.textInside(editableTextState.textEditingValue.text)
+      : null;
+  if (text != null && text.isNotEmpty) {
     buttonItems
       ..insertOrAdd(
         3,
         ContextMenuButtonItem(
           label: '视频',
           onPressed: () {
-            state.onMenuPressed(
-              (text) => PiliScheme.videoPush(null, text),
-            );
+            editableTextState.hideToolbar();
+            PiliScheme.videoPush(null, text);
           },
         ),
       )
@@ -23,18 +26,14 @@ Widget scMenuBuilder(
         ContextMenuButtonItem(
           label: '搜索',
           onPressed: () {
-            state.onMenuPressed(
-              (text) => Get.toNamed(
-                '/searchResult',
-                parameters: {'keyword': text},
-              ),
-            );
+            editableTextState.hideToolbar();
+            Get.toNamed('/searchResult', parameters: {'keyword': text});
           },
         ),
       );
   }
   return AdaptiveTextSelectionToolbar.buttonItems(
     buttonItems: buttonItems,
-    anchors: state.contextMenuAnchors,
+    anchors: editableTextState.contextMenuAnchors,
   );
 }

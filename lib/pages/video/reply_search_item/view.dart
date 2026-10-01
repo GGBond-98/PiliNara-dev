@@ -1,12 +1,12 @@
-import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
-import 'package:PiliPlus/common/widgets/scroll_physics.dart' show tabBarView;
+﻿import 'package:PiliPlus/common/widgets/scroll_physics.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/models/common/reply/reply_search_type.dart';
 import 'package:PiliPlus/pages/video/reply_search_item/child/view.dart';
 import 'package:PiliPlus/pages/video/reply_search_item/controller.dart';
 import 'package:PiliPlus/utils/utils.dart';
-import 'package:get/get.dart';
+import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:get/get.dart';
 
 class ReplySearchPage extends StatefulWidget {
   const ReplySearchPage({
@@ -54,7 +54,7 @@ class _ReplySearchPageState extends State<ReplySearchPage> {
           textAlignVertical: TextAlignVertical.center,
           decoration: InputDecoration(
             hintText: '搜索',
-            visualDensity: .standard,
+            visualDensity: VisualDensity.standard,
             border: InputBorder.none,
             suffixIcon: IconButton(
               tooltip: '清空',

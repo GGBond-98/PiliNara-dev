@@ -1,6 +1,7 @@
 // 视频or合集
 import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/badge.dart';
+import 'package:PiliPlus/common/widgets/cached_layout_builder.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/common/widgets/svg/play_icon.dart';
 import 'package:PiliPlus/models/common/badge_type.dart';
@@ -49,7 +50,7 @@ Widget videoSeasonWidget(
           Stack(
             clipBehavior: Clip.none,
             children: [
-              LayoutBuilder(
+              CachedLayoutBuilder(
                 builder: (context, constraints) => NetworkImgLayer(
                   width: constraints.maxWidth,
                   height: constraints.maxWidth / Style.aspectRatio,

@@ -4,8 +4,9 @@ import 'package:PiliPlus/common/assets.dart';
 import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/custom_icon.dart';
 import 'package:PiliPlus/common/widgets/dialog/report.dart';
+import 'package:PiliPlus/common/widgets/extra_hit_test_widget.dart';
 import 'package:PiliPlus/common/widgets/pendant_avatar.dart';
-import 'package:PiliPlus/common/widgets/translucent_row.dart';
+import 'package:PiliPlus/harmony_adapt/harmony_channel.dart';
 import 'package:PiliPlus/http/constants.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/http/reply.dart';
@@ -31,9 +32,9 @@ import 'package:PiliPlus/utils/user_whitelist.dart';
 import 'package:PiliPlus/utils/share_utils.dart';
 import 'package:cached_network_image_ce/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:material_ui/material_ui.dart';
 
 class AuthorPanel extends StatelessWidget {
   final DynamicItemModel item;
@@ -83,7 +84,7 @@ class AuthorPanel extends StatelessWidget {
       );
       if (moduleAuthor.badgeText case final badgeText?) {
         pubTs = Row(
-          mainAxisSize: .min,
+          mainAxisSize: MainAxisSize.min,
           spacing: 5,
           children: [
             pubTs,
@@ -98,67 +99,66 @@ class AuthorPanel extends StatelessWidget {
         );
       }
     }
-    final children = [
-      PendantAvatar(
-        size: 40,
-        moduleAuthor.face,
-        pendantImage: moduleAuthor.pendant?.image,
-      ),
-      Flexible(
-        child: Column(
-          crossAxisAlignment: .start,
+    Widget header = GestureDetector(
+      onTap: moduleAuthor.type == 'AUTHOR_TYPE_NORMAL'
+          ? () {
+              feedBack();
+              Get.toNamed('/member?mid=${moduleAuthor.mid}');
+            }
+          : null,
+      child: ExtraHitTestWidget(
+        width: 50,
+        child: Row(
+          spacing: 10,
           children: [
-            Text.rich(
-              maxLines: 1,
-              overflow: .ellipsis,
-              TextSpan(
+            PendantAvatar(
+              size: 40,
+              moduleAuthor.face,
+              pendantImage: moduleAuthor.pendant?.image,
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextSpan(
-                    text: remarkedName(moduleAuthor.mid, moduleAuthor.name!),
-                    style: TextStyle(
-                      color:
-                          moduleAuthor.vip != null &&
-                              moduleAuthor.vip!.status > 0 &&
-                              moduleAuthor.vip!.type == 2
-                          ? theme.colorScheme.vipColor
-                          : theme.colorScheme.onSurface,
-                      fontSize: theme.textTheme.titleSmall!.fontSize,
+                  Text.rich(
+                    maxLines: 1,
+                    overflow: .ellipsis,
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: remarkedName(moduleAuthor.mid, moduleAuthor.name!),
+                          style: TextStyle(
+                            color:
+                                moduleAuthor.vip != null &&
+                                    moduleAuthor.vip!.status > 0 &&
+                                    moduleAuthor.vip!.type == 2
+                                ? theme.colorScheme.vipColor
+                                : theme.colorScheme.onSurface,
+                            fontSize: theme.textTheme.titleSmall!.fontSize,
+                          ),
+                        ),
+                        if (!GlobalData().remarkReplaceName &&
+                            remarkOf(moduleAuthor.mid) != null)
+                          TextSpan(
+                            text: '（${remarkOf(moduleAuthor.mid)}）',
+                            style: TextStyle(
+                              color: theme.colorScheme.primary,
+                              fontSize:
+                                  (theme.textTheme.titleSmall!.fontSize ?? 14) -
+                                  1,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                  if (!GlobalData().remarkReplaceName &&
-                      remarkOf(moduleAuthor.mid) != null)
-                    TextSpan(
-                      text: '（${remarkOf(moduleAuthor.mid)}）',
-                      style: TextStyle(
-                        color: theme.colorScheme.primary,
-                        fontSize:
-                            (theme.textTheme.titleSmall!.fontSize ?? 14) - 1,
-                      ),
-                    ),
+                  ?pubTs,
                 ],
               ),
             ),
-            ?pubTs,
           ],
         ),
       ),
-    ];
-    Widget header;
-    if (moduleAuthor.type == 'AUTHOR_TYPE_NORMAL') {
-      header = GestureDetector(
-        onTap: () => {
-          feedBack(),
-          Get.toNamed('/member?mid=${moduleAuthor.mid}'),
-        },
-        child: TranslucentRow(
-          spacing: 10,
-          extraWidth: 50,
-          children: children,
-        ),
-      );
-    } else {
-      header = Row(spacing: 10, children: children);
-    }
+    );
     Widget? moreBtn = isSave
         ? null
         : SizedBox(
@@ -278,12 +278,14 @@ class AuthorPanel extends StatelessWidget {
       }
     } catch (_) {}
 
+    final wasVisible = HarmonyChannel.hdsBarVisible;
+    HarmonyChannel.setShellBarsHidden(true);
     showModalBottomSheet(
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
       constraints: BoxConstraints(
-        maxWidth: min(640, context.mediaQueryShortestSide),
+        maxWidth: min(640, ContextExtensions(context).mediaQueryShortestSide),
       ),
       builder: (context1) {
         final theme = Theme.of(context);
@@ -343,7 +345,7 @@ class AuthorPanel extends StatelessWidget {
                 onTap: () {
                   Get.back();
                   ShareUtils.shareText(
-                    '${HttpString.opusBaseUrl}/${item.idStr}',
+                    '${HttpString.dynamicShareBaseUrl}/${item.idStr}',
                   );
                 },
                 minLeadingWidth: 0,
@@ -716,6 +718,8 @@ class AuthorPanel extends StatelessWidget {
           ),
         );
       },
-    );
+    ).then((_) {
+      if (wasVisible) HarmonyChannel.setShellBarsHidden(false);
+    });
   }
 }

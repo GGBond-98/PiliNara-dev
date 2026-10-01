@@ -1,6 +1,5 @@
 import 'package:PiliPlus/common/widgets/flutter/refresh_indicator.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
-import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/grpc/bilibili/main/community/reply/v1.pb.dart'
     show ReplyInfo;
@@ -15,6 +14,7 @@ import 'package:PiliPlus/utils/date_utils.dart';
 import 'package:PiliPlus/utils/extension/get_ext.dart';
 import 'package:PiliPlus/utils/extension/widget_ext.dart';
 import 'package:PiliPlus/utils/page_utils.dart';
+import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:easy_debounce/easy_throttle.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
@@ -39,28 +39,27 @@ class _MatchInfoPageState extends CommonDynPageState<MatchInfoPage> {
 
   @override
   Widget build(BuildContext context) {
-    return fabAnimWrapper(
-      child: SimpleScaffold(
-        appBar: AppBar(title: const Text('比赛详情')),
-        body: ViewSafeArea(
-          child: refreshIndicator(
-            onRefresh: controller.onRefresh,
-            child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                Obx(() => _buildInfo(controller.infoState.value)),
-                buildReplyHeader(),
-                Obx(() => replyList(controller.loadingState.value)),
-              ],
-            ),
+    final child = SimpleScaffold(
+      appBar: AppBar(title: const Text('比赛详情')),
+      body: ViewSafeArea(
+        child: refreshIndicator(
+          onRefresh: controller.onRefresh,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              Obx(() => _buildInfo(controller.infoState.value)),
+              buildReplyHeader(),
+              Obx(() => replyList(controller.loadingState.value)),
+            ],
           ),
-        ).constraintWidth(),
-        fab: SlideTransition(
-          position: fabAnimation,
-          child: fabButton,
         ),
+      ).constraintWidth(),
+      fab: SlideTransition(
+        position: fabAnimation,
+        child: fabButton,
       ),
     );
+    return fabAnimWrapper(child: child);
   }
 
   Widget _buildInfo(LoadingState<MatchContest?> infoState) {
@@ -117,7 +116,8 @@ class _MatchInfoPageState extends CommonDynPageState<MatchInfoPage> {
                                 : '${response.homeScore} : ${response.awayScore}',
                             style: const TextStyle(
                               fontSize: 25,
-                              fontWeight: FontWeight.bold,
+                              fontWeight: .bold,
+                              letterSpacing: 1.5,
                             ),
                           )
                         else if (response.season?.logo != null)

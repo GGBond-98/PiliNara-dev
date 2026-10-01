@@ -3,7 +3,6 @@ import 'package:PiliPlus/common/sliver_single_child_delegate.dart';
 import 'package:PiliPlus/common/widgets/flutter/popup_menu.dart';
 import 'package:PiliPlus/common/widgets/flutter/refresh_indicator.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
-import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/grpc/bilibili/app/im/v1.pb.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/pages/whisper/controller.dart';
@@ -11,9 +10,10 @@ import 'package:PiliPlus/pages/whisper/widgets/item.dart';
 import 'package:PiliPlus/utils/extension/theme_ext.dart';
 import 'package:PiliPlus/utils/extension/three_dot_ext.dart';
 import 'package:PiliPlus/utils/theme_utils.dart';
+import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:material_ui/material_ui.dart';
 
 class WhisperPage extends StatefulWidget {
   const WhisperPage({super.key});
@@ -48,7 +48,7 @@ class _WhisperPageState extends State<WhisperPage> {
             final outsideItem = _controller.outsideItem.value;
             if (outsideItem != null && outsideItem.isNotEmpty) {
               return Row(
-                mainAxisSize: .min,
+                mainAxisSize: MainAxisSize.min,
                 children: outsideItem.map((e) {
                   return IconButton(
                     tooltip: e.hasTitle() ? e.title : null,

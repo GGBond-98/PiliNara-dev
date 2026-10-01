@@ -6,8 +6,8 @@ import 'package:PiliPlus/common/widgets/flutter/refresh_indicator.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
 import 'package:PiliPlus/common/widgets/pair.dart';
-import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/selection_text.dart';
+import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/sliver/sliver_pinned_header.dart';
 import 'package:PiliPlus/http/constants.dart';
 import 'package:PiliPlus/http/loading_state.dart';
@@ -145,9 +145,9 @@ class _DynTopicPageState extends State<DynTopicPage>
       fab: SlideTransition(
         position: fabAnimation,
         child: Padding(
-          padding: .only(
-            right: kFloatingActionButtonMargin + padding.right,
-            bottom: kFloatingActionButtonMargin + padding.bottom,
+          padding: EdgeInsets.only(
+            right: padding.right + kFloatingActionButtonMargin,
+            bottom: padding.bottom + kFloatingActionButtonMargin,
           ),
           child: FloatingActionButton.extended(
             onPressed: () {
@@ -403,15 +403,14 @@ class _DynTopicPageState extends State<DynTopicPage>
   Widget _buildFoldItem(FoldCardItem item) {
     return Padding(
       padding: const .only(top: 12),
-      child: Material(
-        color: colorScheme.outline.withValues(alpha: .05),
-        child: InkWell(
-          onTap: _controller.topicFold,
-          child: Padding(
-            padding: const .symmetric(vertical: 10),
+      child: InkWell(
+        onTap: _controller.topicFold,
+        child: Ink(
+          padding: const .symmetric(vertical: 10),
+          color: colorScheme.outline.withValues(alpha: .05),
+          child: Center(
             child: Row(
               mainAxisSize: .min,
-              mainAxisAlignment: .center,
               children: [
                 Text(item.foldDesc!),
                 const Icon(Icons.keyboard_arrow_right, size: 22),

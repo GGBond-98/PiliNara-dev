@@ -16,6 +16,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:os_type/os_type.dart';
 
 final _setCookieReg = RegExp('(?<=)(,)(?=[^;]+?=)');
 
@@ -171,6 +172,7 @@ class AccountManager extends Interceptor {
       'hdslb.com',
       'biliimg.com',
       'site/getCoin',
+      'pbp/data',
     ];
     String url = err.requestOptions.uri.toString();
     if (kDebugMode) debugPrint('🌹🌹ApiInterceptor: $url\n$err');
@@ -261,12 +263,12 @@ class AccountManager extends Interceptor {
         return '响应超时，请稍后重试！';
       case .sendTimeout:
         return '发送请求超时，请检查网络设置';
-      case .transformTimeout:
-        return '转换响应数据超时！';
       case .unknown:
         String desc;
         try {
-          desc = PlatformUtils.isMobile
+          // TODO 鸿蒙待适配 Connectivity Checks the connection status of the device.
+          // 在 OHOS 上调用 Connectivity 可能因权限未授予而报 201，直接跳过。
+          desc = PlatformUtils.isMobile && !OS.isHarmony
               ? (await Connectivity().checkConnectivity()).first.desc
               : '';
         } catch (_) {

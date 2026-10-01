@@ -328,7 +328,7 @@ class CustomPopupMenuItemState<T> extends State<CustomPopupMenuItem<T>> {
         (widget.selected ? _kMd3eMenuItemSelectedRadius : _kMd3eMenuItemRadius);
 
     return ListTileTheme.merge(
-      contentPadding: .zero,
+      contentPadding: EdgeInsetsGeometry.zero,
       titleTextStyle: style,
       iconColor: widget.selected ? selectedForegroundColor : colors.outline,
       child: Padding(

@@ -3,8 +3,7 @@ import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/avatars.dart';
 import 'package:PiliPlus/common/widgets/image_viewer/hero.dart';
 import 'package:PiliPlus/common/widgets/pendant_avatar.dart';
-import 'package:PiliPlus/common/widgets/scroll_physics.dart'
-    show tabBarScrollPhysics;
+import 'package:PiliPlus/common/widgets/scroll_physics.dart';
 import 'package:PiliPlus/common/widgets/selection_text.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/models/common/image_preview_type.dart';
@@ -40,9 +39,9 @@ import 'package:PiliPlus/utils/platform_utils.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:cached_network_image_ce/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:material_ui/material_ui.dart';
 
 class UserInfoCard extends StatelessWidget {
   const UserInfoCard({
@@ -84,7 +83,7 @@ class UserInfoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final isLight = colorScheme.isLight;
-    final width = context.width;
+    final width = ContextExtensions(context).width;
     final isPortrait = width < 600;
     return ViewSafeArea(
       top: !isPortrait,
@@ -121,7 +120,7 @@ class UserInfoCard extends StatelessWidget {
       alignment: const Alignment(0.0, -0.8),
     );
     return GestureDetector(
-      behavior: .opaque,
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
       onLongPress: PlatformUtils.isMobile ? onShowCount : null,
       onSecondaryTap: PlatformUtils.isDesktop ? onShowCount : null,
@@ -129,7 +128,7 @@ class UserInfoCard extends StatelessWidget {
         alignment: type.alignment,
         widthFactor: 1.0,
         child: Column(
-          mainAxisSize: .min,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               NumUtils.numFormat(count),
@@ -419,7 +418,6 @@ class UserInfoCard extends StatelessWidget {
   }
 
   Column _buildRight(ColorScheme colorScheme) => Column(
-    spacing: 5,
     mainAxisSize: .min,
     children: [
       Row(
@@ -443,6 +441,7 @@ class UserInfoCard extends StatelessWidget {
             .skip(1)
             .toList(),
       ),
+      const SizedBox(height: 5),
       Row(
         spacing: 10,
         mainAxisSize: .min,
@@ -465,27 +464,24 @@ class UserInfoCard extends StatelessWidget {
                 }
               },
               icon: const Icon(Icons.mail_outline, size: 21),
-              style: ButtonStyle(
-                side: WidgetStatePropertyAll(
-                  BorderSide(
-                    width: 1.0,
-                    color: colorScheme.outline.withValues(alpha: 0.3),
-                  ),
+              style: IconButton.styleFrom(
+                side: BorderSide(
+                  width: 1.0,
+                  color: colorScheme.outline.withValues(alpha: 0.3),
                 ),
-                padding: const WidgetStatePropertyAll(.zero),
-                tapTargetSize: .shrinkWrap,
+                padding: .zero,
+                tapTargetSize: .padded,
                 visualDensity: .compact,
               ),
             ),
           Expanded(
             child: FilledButton.tonal(
               onPressed: !isOwner && relation == -1 ? null : onFollow,
-              style: ButtonStyle(
-                padding: const WidgetStatePropertyAll(.zero),
+              style: FilledButton.styleFrom(
                 backgroundColor: relation != 0
-                    ? WidgetStatePropertyAll(colorScheme.onInverseSurface)
+                    ? colorScheme.onInverseSurface
                     : null,
-                tapTargetSize: .padded,
+                tapTargetSize: MaterialTapTargetSize.padded,
                 visualDensity: const VisualDensity(vertical: -1.8),
               ),
               child: Text.rich(

@@ -7,6 +7,8 @@ import 'package:PiliPlus/common/widgets/custom_toast.dart';
 import 'package:PiliPlus/common/widgets/route_aware_mixin.dart';
 import 'package:PiliPlus/common/widgets/scale_app.dart';
 import 'package:PiliPlus/common/widgets/scroll_behavior.dart';
+import 'package:PiliPlus/harmony_adapt/harmony_channel.dart';
+import 'package:PiliPlus/harmony_adapt/shell_bars_observer.dart';
 import 'package:PiliPlus/http/init.dart';
 import 'package:PiliPlus/models/common/theme/theme_color_type.dart';
 import 'package:PiliPlus/plugin/pl_player/utils/fullscreen.dart';
@@ -22,6 +24,7 @@ import 'package:PiliPlus/utils/date_utils.dart';
 import 'package:PiliPlus/utils/extension/core_palettes_ext.dart';
 import 'package:PiliPlus/utils/extension/theme_ext.dart';
 import 'package:PiliPlus/utils/font_utils.dart';
+import 'package:PiliPlus/utils/image_memory_cleaner.dart';
 import 'package:PiliPlus/utils/json_file_handler.dart';
 import 'package:PiliPlus/utils/max_screen_size.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
@@ -37,13 +40,16 @@ import 'package:catcher_2/catcher_2.dart';
 import 'package:collection/collection.dart';
 import 'package:dynamic_color/dynamic_color.dart' show DynamicColorPlugin;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart' show DeviceGestureSettings;
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:os_type/os_type.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:screen_brightness_platform_interface/screen_brightness_platform_interface.dart';
@@ -73,6 +79,8 @@ Future<void> _initDownPath() async {
     } else {
       downloadPath = defDownloadPath;
     }
+  } else if (OS.isHarmony) {
+    downloadPath = 'storage/Users/currentUser/Download/com.dev4harmony.pilinara';
   } else if (Platform.isAndroid) {
     final externalStorageDirPath = (await getExternalStorageDirectory())?.path;
     downloadPath = externalStorageDirPath != null
@@ -94,11 +102,12 @@ Future<void> _initAppPath() async {
 void main() async {
   ScaledWidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
+  if (OS.isHarmony) await OS.initHarmonyDeviceType();
   await _initAppPath();
   try {
     await GStorage.init();
   } catch (e) {
-    await Utils.copyText(e.toString());
+    await Utils.copyText(e.toString(), needToast: false);
     if (kDebugMode) debugPrint('GStorage init error: $e');
     exit(0);
   }
@@ -113,6 +122,8 @@ void main() async {
     ..lazyPut(AccountService.new)
     ..lazyPut(DownloadService.new)
     ..put(DownloadCollectionService());
+
+  // 配置网络请求
   HttpOverrides.global = _CustomHttpOverrides();
 
   if (PlatformUtils.isMobile) {
@@ -121,11 +132,18 @@ void main() async {
       if (Pref.horizontalScreen) ?fullMode() else ?portraitUpMode(),
       setupServiceLocator(),
     ]);
+  } else if (OS.isHarmony) {
+    // 鸿蒙 2in1 设备 isPCOS 为 true（isMobile 为 false），但同样需要媒体服务，
+    // 否则后台播放与系统播控失效
+    await setupServiceLocator();
   } else if (Platform.isWindows) {
     if (await WebViewEnvironment.getAvailableVersion() != null) {
       webViewEnvironment = await WebViewEnvironment.create(
         settings: WebViewEnvironmentSettings(
-          userDataFolder: path.join(appSupportDirPath, 'flutter_inappwebview'),
+          userDataFolder: path.join(
+            appSupportDirPath,
+            'flutter_inappwebview',
+          ),
         ),
       );
     }
@@ -154,7 +172,14 @@ void main() async {
   FocusManager.instance.addEarlyKeyEventHandler(_onKeyEvent);
 
   if (PlatformUtils.isMobile) {
-    SystemChrome.setEnabledSystemUIMode(.edgeToEdge);
+    if (OS.isHarmony) {
+      // 鸿蒙按窗口状态选系统栏模式：自由多窗下隐藏系统装饰栏（沉浸），否则
+      // edgeToEdge。必须在首帧前一次到位——先 edgeToEdge 再改会让装饰栏先
+      // 出现再收回。见 HarmonyChannel.initWindowState / _syncWindowDecor。
+      await HarmonyChannel.initWindowState();
+    } else {
+      SystemChrome.setEnabledSystemUIMode(.edgeToEdge);
+    }
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         systemNavigationBarColor: Colors.transparent,
@@ -179,7 +204,7 @@ void main() async {
     } else {
       ScreenBrightnessPlatform.instance.setAutoReset(false);
     }
-  } else if (PlatformUtils.isDesktop) {
+  } else if (PlatformUtils.isDesktop && !OS.isHarmony) {
     await windowManager.ensureInitialized();
 
     final windowOptions = WindowOptions(
@@ -206,18 +231,15 @@ void main() async {
   }
 
   if (Pref.enableLog) {
-    // 异常捕获 logo记录
+    // 异常捕获记录
     final customParameters = {
       'Build Time': DateFormatUtils.format(
         BuildConfig.buildTime,
         format: DateFormatUtils.longFormatDs,
       ),
       'Commit Hash': BuildConfig.commitHash,
-      'MPV Api Version':
-          '${NativePlayer.apiVersion >> 16}.${NativePlayer.apiVersion & 0xFFFF}',
     };
     final fileHandler = await JsonFileHandler.init();
-
     Catcher2(
       [?fileHandler, const ConsoleHandler()],
       const MyApp(),
@@ -227,57 +249,81 @@ void main() async {
   } else {
     runApp(const MyApp());
   }
-}
 
+  ImageMemoryCleaner.instance.register();
+
+  if (OS.isHarmony) {
+    // 本次启动若由跨设备接续拉起，首帧后取回接续数据并跳转视频页；
+    // 顺带注册 method channel handler，保证热启动接续推送可达
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      HarmonyChannel.checkPendingContinuation();
+      // 获取系统初始字重值
+      HarmonyChannel.initSystemFontWeight();
+      // 将当前主题颜色模式同步给原生层（Rx 初始值相同不触发监听，需显式同步）
+      ThemeUtils.syncColorModeToNative();
+    });
+  }
+}
 KeyEventResult _onKeyEvent(KeyEvent event) {
-  if (event.logicalKey == .escape && event is KeyDownEvent) {
-    _onBack();
-    return .handled;
+  if (event.logicalKey == LogicalKeyboardKey.escape && event is KeyDownEvent) {
+    MyApp._onBack();
+    return KeyEventResult.handled;
   }
-  return .ignored;
-}
-
-void _onBack() {
-  if (SmartDialog.checkExist()) {
-    SmartDialog.dismiss();
-    return;
-  }
-
-  final route = Get.routing.route;
-  if (route is GetPageRoute) {
-    if (route.popDisposition == .doNotPop) {
-      route.onPopInvokedWithResult(false, null);
-      return;
-    }
-  }
-
-  final navigator = Get.key.currentState!;
-  if (navigator.canPop()) {
-    navigator.pop();
-  }
+  return KeyEventResult.ignored;
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   static ColorScheme? _light, _dark;
+  static final shellBarsObserver = ShellBarsObserver();
+
+  static void _onBack() {
+    if (SmartDialog.checkExist()) {
+      SmartDialog.dismiss();
+      return;
+    }
+
+    final route = Get.routing.route;
+    if (route is GetPageRoute) {
+      if (route.popDisposition == .doNotPop) {
+        route.onPopInvokedWithResult(false, null);
+        return;
+      }
+    }
+
+    final navigator = Get.key.currentState;
+    if (navigator?.canPop() ?? false) {
+      navigator!.pop();
+    }
+  }
 
   static (ThemeData, ThemeData) getAllTheme() {
     final dynamicColor = _light != null && _dark != null && Pref.dynamicColor;
-    late final brandColor = colorThemeTypes[Pref.customColor].color;
-    late final variant = Pref.schemeVariant;
+
+    final ColorScheme lightScheme, darkScheme;
+    if (dynamicColor) {
+      lightScheme = _light!;
+      darkScheme = _dark!;
+    } else {
+      final customColor = Pref.customColor;
+      final brandColor =
+          colorThemeTypes.elementAtOrNull(customColor)?.color ??
+          Color(customColor);
+      final variant = Pref.schemeVariant;
+
+      lightScheme = brandColor.asColorSchemeSeed(variant, .light);
+      darkScheme = brandColor.asColorSchemeSeed(variant, .dark);
+    }
+
     return (
       ThemeUtils.lightTheme = ThemeUtils.getThemeData(
-        colorScheme: dynamicColor
-            ? _light!
-            : brandColor.asColorSchemeSeed(variant, .light),
+        colorScheme: lightScheme,
         isDynamic: dynamicColor,
       ),
       ThemeUtils.darkTheme = ThemeUtils.getThemeData(
         isDark: true,
-        colorScheme: dynamicColor
-            ? _dark!
-            : brandColor.asColorSchemeSeed(variant, .dark),
+        colorScheme: darkScheme,
         isDynamic: dynamicColor,
       ),
     );
@@ -291,7 +337,11 @@ class MyApp extends StatelessWidget {
       theme: light,
       darkTheme: dark,
       themeMode: ThemeUtils.themeMode = Pref.themeMode,
-      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      localizationsDelegates: const [
+        GlobalCupertinoLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ],
       locale: const Locale("zh", "CN"),
       fallbackLocale: const Locale("zh", "CN"),
       supportedLocales: const [Locale("zh", "CN"), Locale("en", "US")],
@@ -309,8 +359,11 @@ class MyApp extends StatelessWidget {
       navigatorObservers: [
         routeObserver,
         FlutterSmartDialog.observer,
+        shellBarsObserver,
       ],
-      scrollBehavior: PlatformUtils.isDesktop
+      scrollBehavior: OS.isHarmony
+          ? const HarmonyScrollBehavior()
+          : PlatformUtils.isDesktop
           ? const CustomScrollBehavior()
           : null,
     );
@@ -318,7 +371,25 @@ class MyApp extends StatelessWidget {
 
   // 修复后的 Builder 方法
   static Widget _builder(BuildContext context, Widget? child) {
-    final uiScale = Pref.uiScale;
+    // scaleFactor 变化不会改变根 View 的 MediaQuery 数据（physicalSize/dpr
+    // 均来自引擎），本方法不会因此重建，下面的缩放校正会失效、页面布局与
+    // 渲染画布脱节（如平板全景多窗内点全屏后内容只占 75%、右/下露白底）。
+    // 必须显式监听缩放变化触发重建。
+    // 鸿蒙挖孔避让区由原生异步上报/随旋转变化，同样不会触发根 MediaQuery
+    // 重建，一并监听。
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        ScaledWidgetsFlutterBinding.instance.scaleFactorNotifier,
+        if (OS.isHarmony) HarmonyChannel.cutoutInsets,
+        if (OS.isHarmony) HarmonyChannel.decorTopInset,
+      ]),
+      builder: (context, _) => _scaledBuilder(context, child),
+    );
+  }
+
+  static Widget _scaledBuilder(BuildContext context, Widget? child) {
+    // 鸿蒙小窗横屏临时缩小时需要获取真正的缩放比例
+    final uiScale = ScaledWidgetsFlutterBinding.instance.scaleFactor;
     var mediaQuery = MediaQuery.of(context);
     final textScaler = TextScaler.linear(Pref.defaultTextScale);
 
@@ -345,6 +416,28 @@ class MyApp extends StatelessWidget {
     }
     // -----------------------------------------------------------------------
 
+    // 鸿蒙 embedding（FlutterPage/FlutterView）把 ArkUI PanGesture 默认的
+    // 5(vp) 当 physicalTouchSlop 下发，框架除以 DPR 后竖向滚动的触发阈值
+    // 只有 ~1.5 逻辑像素（Android 约为 8）。竖向手势几乎瞬间赢得竞技场，
+    // 横向滑动（如简介/评论切换）无论怎么放宽都抢不到。此处恢复为
+    // Android 水平，使横竖手势能按主导方向公平竞争。
+    //
+    // 注意：必须在这里覆盖 mediaQuery 本身，而不是往下面某个 copyWith 里加
+    // 参数——gestureSettings 与 uiScale 无关，两条分支都得生效。之前写在
+    // copyWith 参数里，跟进上游 2.1.0 时 uiScale == 1.0 的分支被整体覆盖，
+    // 覆盖参数被静默丢掉，手机上（uiScale 恒为 1.0）该修复完全失效。
+    if (OS.isHarmony) {
+      // 鸿蒙 embedding 上报的 padding 不含摄像头挖孔（只读 TYPE_SYSTEM 避让区），
+      // 横屏时 left/right 恒为 0、竖屏隐藏状态栏后 top 归 0。此处把原生上报的
+      // TYPE_CUTOUT 避让区按边取 max 合并进来，对齐 Android 语义，下游
+      // ViewSafeArea/SafeArea 无需再区分平台。见 HarmonyChannel.cutoutInsets。
+      final dpr = mediaQuery.devicePixelRatio;
+      mediaQuery = mediaQuery.copyWith(
+        gestureSettings: const DeviceGestureSettings(touchSlop: 8),
+        padding: HarmonyChannel.mergeCutout(mediaQuery.padding, dpr),
+        viewPadding: HarmonyChannel.mergeCutout(mediaQuery.viewPadding, dpr),
+      );
+    }
     if (uiScale != 1.0) {
       child = MediaQuery(
         data: mediaQuery.copyWith(
@@ -357,13 +450,18 @@ class MyApp extends StatelessWidget {
         ),
         child: child!,
       );
-    } else {
+    } else if (tmpPadding != null) {
       child = MediaQuery(
         data: mediaQuery.copyWith(
           textScaler: textScaler,
           padding: tmpPadding ?? mediaQuery.padding,
           viewPadding: tmpPadding ?? mediaQuery.viewPadding,
         ),
+        child: child!,
+      );
+    } else {
+      child = MediaQuery(
+        data: mediaQuery.copyWith(textScaler: textScaler),
         child: child!,
       );
     }
@@ -405,8 +503,8 @@ class MyApp extends StatelessWidget {
           debugPrint('dynamic_color: Accent color detected.');
         }
         final variant = Pref.schemeVariant;
-        _light = accentColor.asColorSchemeSeed(variant, .light);
-        _dark = accentColor.asColorSchemeSeed(variant, .dark);
+        _light = accentColor.asColorSchemeSeed(variant, Brightness.light);
+        _dark = accentColor.asColorSchemeSeed(variant, Brightness.dark);
         return true;
       }
     } on PlatformException {

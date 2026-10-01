@@ -1,6 +1,6 @@
 import 'package:PiliPlus/pages/common/common_list_controller.dart';
-import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:get/get.dart';
 
 abstract class CommonSearchController<R, T> extends CommonListController<R, T> {
   final editController = TextEditingController();
@@ -17,7 +17,7 @@ abstract class CommonSearchController<R, T> extends CommonListController<R, T> {
   @override
   Future<void> onRefresh() {
     if (editController.value.text.isEmpty) {
-      return Future.syncValue(null);
+      return Future.value(null);
     }
     return super.onRefresh();
   }

@@ -31,8 +31,10 @@ abstract final class ShareUtils {
       return;
     }
     try {
-      await SharePlus.instance.share(
-        ShareParams(text: text, sharePositionOrigin: await sharePositionOrigin),
+      // 保留 share_plus 10.x API：鸿蒙适配 fork 停留在 br_share_plus-v10.1.1_ohos
+      await Share.share(
+        text,
+        sharePositionOrigin: await sharePositionOrigin,
       );
     } catch (e) {
       SmartDialog.showToast(e.toString());

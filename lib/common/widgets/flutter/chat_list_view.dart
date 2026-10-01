@@ -2,71 +2,101 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// ignore_for_file: prefer_initializing_formals
+import 'dart:math' as math;
 
-import 'package:PiliPlus/common/widgets/sliver/sliver_constrained_cross_axis.dart';
-import 'package:flutter/foundation.dart' show precisionErrorTolerance;
-import 'package:flutter/rendering.dart'
-    show
-        RenderSliverList,
-        SliverConstraints,
-        SliverMultiBoxAdaptorParentData,
-        RenderSliverMultiBoxAdaptor,
-        SliverGeometry;
-import 'package:flutter/widgets.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
-class ChatListView extends ListView {
+class ChatListView extends BoxScrollView {
   ChatListView.separated({
     super.key,
-    required this.maxExtent,
     super.scrollDirection,
     super.controller,
     super.primary,
     super.physics,
     super.padding,
-    required super.itemBuilder,
-    // ignore: deprecated_member_use
-    super.findChildIndexCallback,
-    super.findItemIndexCallback,
-    required super.separatorBuilder,
-    required super.itemCount,
-    super.addAutomaticKeepAlives,
-    super.addRepaintBoundaries,
-    super.addSemanticIndexes,
-    // ignore: deprecated_member_use
+    required NullableIndexedWidgetBuilder itemBuilder,
+    @Deprecated(
+      'Use findItemIndexCallback instead. '
+      'findChildIndexCallback returns child indices (which include separators), '
+      'while findItemIndexCallback returns item indices (which do not). '
+      'If you were multiplying results by 2 to account for separators, '
+      'you can remove that workaround when migrating to findItemIndexCallback. '
+      'This feature was deprecated after v3.37.0-1.0.pre.',
+    )
+    ChildIndexGetter? findChildIndexCallback,
+    ChildIndexGetter? findItemIndexCallback,
+    required IndexedWidgetBuilder separatorBuilder,
+    required int itemCount,
+    bool addAutomaticKeepAlives = true,
+    bool addRepaintBoundaries = true,
+    bool addSemanticIndexes = true,
     super.cacheExtent,
-    super.scrollCacheExtent,
     super.dragStartBehavior,
     super.keyboardDismissBehavior,
     super.restorationId,
     super.clipBehavior,
     super.hitTestBehavior,
-  }) : super.separated(reverse: true);
+  }) : assert(itemCount >= 0),
+       assert(
+         findItemIndexCallback == null || findChildIndexCallback == null,
+         'Cannot provide both findItemIndexCallback and findChildIndexCallback. '
+         'Use findItemIndexCallback as findChildIndexCallback is deprecated.',
+       ),
+       childrenDelegate = SliverChildBuilderDelegate(
+         (BuildContext context, int index) {
+           final int itemIndex = index ~/ 2;
+           if (index.isEven) {
+             return itemBuilder(context, itemIndex);
+           }
+           return separatorBuilder(context, itemIndex);
+         },
+         findChildIndexCallback: findItemIndexCallback != null
+             ? (Key key) {
+                 final int? itemIndex = findItemIndexCallback(key);
+                 return itemIndex == null ? null : itemIndex * 2;
+               }
+             : findChildIndexCallback,
+         childCount: _computeActualChildCount(itemCount),
+         addAutomaticKeepAlives: addAutomaticKeepAlives,
+         addRepaintBoundaries: addRepaintBoundaries,
+         addSemanticIndexes: addSemanticIndexes,
+         semanticIndexCallback: (Widget widget, int index) {
+           return index.isEven ? index ~/ 2 : null;
+         },
+       ),
+       super(semanticChildCount: itemCount, reverse: true);
 
-  final double maxExtent;
+  final SliverChildDelegate childrenDelegate;
 
   @override
   Widget buildChildLayout(BuildContext context) {
-    return CenteredSliverConstrainedCrossAxis(
-      maxExtent: maxExtent,
-      sliver: ChatSliverList(delegate: childrenDelegate),
-    );
+    return SliverChatList(delegate: childrenDelegate);
+  }
+
+  static int _computeActualChildCount(int itemCount) {
+    return math.max(0, itemCount * 2 - 1);
   }
 }
 
-class ChatSliverList extends SliverList {
-  const ChatSliverList({super.key, required super.delegate});
+class SliverChatList extends SliverMultiBoxAdaptorWidget {
+  const SliverChatList({super.key, required super.delegate});
 
   @override
-  RenderChatSliverList createRenderObject(BuildContext context) {
+  SliverMultiBoxAdaptorElement createElement() =>
+      SliverMultiBoxAdaptorElement(this, replaceMovedChildren: true);
+
+  @override
+  RenderSliverChatList createRenderObject(BuildContext context) {
     final element = context as SliverMultiBoxAdaptorElement;
-    return RenderChatSliverList(childManager: element);
+    return RenderSliverChatList(childManager: element);
   }
 }
 
-class RenderChatSliverList extends RenderSliverList
+class RenderSliverChatList extends RenderSliverMultiBoxAdaptor
     with ExtendedRenderObjectMixin {
-  RenderChatSliverList({required super.childManager});
+  RenderSliverChatList({required super.childManager});
 
   @override
   void performLayout() {

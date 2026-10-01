@@ -1,10 +1,14 @@
-import 'dart:math' as math;
-
-import 'package:PiliPlus/common/widgets/slotted_layout_helper.dart';
-import 'package:flutter/rendering.dart' show ChildLayoutHelper;
+import 'package:PiliPlus/utils/extension/scroll_controller_ext.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/rendering.dart'
+    show
+        BoxParentData,
+        BoxHitTestResult,
+        ChildLayoutHelper,
+        HitTestResult,
+        RenderMetaData;
 
-class SimpleScaffold extends StatelessWidget {
+class SimpleScaffold extends StatefulWidget {
   const SimpleScaffold({
     super.key,
     this.backgroundColor,
@@ -19,29 +23,83 @@ class SimpleScaffold extends StatelessWidget {
   final Widget body;
 
   @override
+  State<SimpleScaffold> createState() => _SimpleScaffoldState();
+}
+
+class _SimpleScaffoldState extends State<SimpleScaffold>
+    with WidgetsBindingObserver {
+  final _statusBarKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void handleStatusBarTap() {
+    super.handleStatusBarTap();
+    if (!_hitTestableAtOrigin()) return;
+    final primaryScrollController = PrimaryScrollController.maybeOf(context);
+    if (primaryScrollController?.hasClients == true) {
+      primaryScrollController!.animToTop();
+    }
+  }
+
+  bool _hitTestableAtOrigin() {
+    final element = _statusBarKey.currentContext as Element?;
+    if (element == null) return false;
+    final renderObject = element.renderObject;
+    if (renderObject is! RenderMetaData) return false;
+    final result = HitTestResult();
+    WidgetsBinding.instance.hitTestInView(
+      result,
+      Offset.zero,
+      View.of(context).viewId,
+    );
+    return result.path.any((entry) => entry.target == renderObject);
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Material(
-      color: backgroundColor,
+      color: widget.backgroundColor,
       child: ScaffoldLayout(
-        fab: fab,
-        appBar: appBar,
-        body: body,
+        statusBar: MetaData(
+          key: _statusBarKey,
+          behavior: HitTestBehavior.translucent,
+          child: SizedBox(
+            width: double.infinity,
+            height: MediaQuery.paddingOf(context).top,
+          ),
+        ),
+        fab: widget.fab,
+        appBar: widget.appBar,
+        body: widget.body,
       ),
     );
   }
 }
 
-enum ScaffoldType { fab, appBar, body }
+enum ScaffoldType { statusBar, fab, appBar, body }
 
 class ScaffoldLayout
     extends SlottedMultiChildRenderObjectWidget<ScaffoldType, RenderBox> {
   const ScaffoldLayout({
     super.key,
+    this.statusBar,
     this.fab,
     this.appBar,
     required this.body,
   });
 
+  final Widget? statusBar;
   final Widget? fab;
   final Widget? appBar;
   final Widget body;
@@ -51,6 +109,7 @@ class ScaffoldLayout
 
   @override
   Widget? childForSlot(slot) => switch (slot) {
+    .statusBar => statusBar,
     .fab => fab,
     .appBar => appBar,
     .body => body,
@@ -65,20 +124,33 @@ class ScaffoldLayout
 }
 
 class _RenderScaffoldLayout extends RenderBox
-    with
-        SlottedContainerRenderObjectMixin<ScaffoldType, RenderBox>,
-        SlottedLayoutMixin {
+    with SlottedContainerRenderObjectMixin<ScaffoldType, RenderBox> {
   RenderBox? get fab => childForSlot(.fab);
   RenderBox? get appBar => childForSlot(.appBar);
+  RenderBox? get statusBar => childForSlot(.statusBar);
   RenderBox get body => childForSlot(.body)!;
 
-  @override
-  Iterable<ScaffoldType> get slots => ScaffoldType.values;
+  Offset _getOffset(RenderBox child) {
+    return (child.parentData as BoxParentData).offset;
+  }
+
+  void _setOffset(RenderBox child, Offset offset) {
+    (child.parentData as BoxParentData).offset = offset;
+  }
 
   @override
   void performLayout() {
     final constraints = this.constraints;
     size = constraints.biggest;
+
+    final statusBar = this.statusBar;
+    if (statusBar != null) {
+      ChildLayoutHelper.layoutChild(
+        statusBar,
+        BoxConstraints.tightFor(width: constraints.maxWidth),
+      );
+      _setOffset(statusBar, .zero);
+    }
 
     final Offset bodyOffset;
     final BoxConstraints bodyConstraints;
@@ -89,12 +161,12 @@ class _RenderScaffoldLayout extends RenderBox
         appBar,
         BoxConstraints.tightFor(width: constraints.maxWidth),
       ).height;
-      setOffset(appBar, .zero);
+      _setOffset(appBar, .zero);
 
       bodyOffset = Offset(0, appBarHeight);
       bodyConstraints = BoxConstraints.tightFor(
         width: constraints.maxWidth,
-        height: math.max(constraints.maxHeight - appBarHeight, 0.0),
+        height: constraints.maxHeight - appBarHeight,
       );
     } else {
       bodyOffset = .zero;
@@ -102,12 +174,12 @@ class _RenderScaffoldLayout extends RenderBox
     }
 
     final body = this.body..layout(bodyConstraints);
-    setOffset(body, bodyOffset);
+    _setOffset(body, bodyOffset);
 
     final fab = this.fab;
     if (fab != null) {
       final fabSize = ChildLayoutHelper.layoutChild(fab, constraints.loosen());
-      setOffset(
+      _setOffset(
         fab,
         Offset(
           constraints.maxWidth - fabSize.width,
@@ -121,12 +193,31 @@ class _RenderScaffoldLayout extends RenderBox
   void paint(PaintingContext context, Offset offset) {
     void doPaint(RenderBox? child) {
       if (child != null) {
-        context.paintChild(child, getOffset(child) + offset);
+        context.paintChild(child, _getOffset(child) + offset);
       }
     }
 
     doPaint(body);
     doPaint(appBar);
     doPaint(fab);
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    for (final type in ScaffoldType.values) {
+      final child = childForSlot(type);
+      if (child == null) continue;
+      final bool isHit = result.addWithPaintOffset(
+        offset: _getOffset(child),
+        position: position,
+        hitTest: (BoxHitTestResult result, Offset transformed) {
+          return child.hitTest(result, position: transformed);
+        },
+      );
+      if (isHit) {
+        return true;
+      }
+    }
+    return false;
   }
 }

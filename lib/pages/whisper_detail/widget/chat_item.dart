@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:PiliPlus/common/constants.dart';
 import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/badge.dart';
+import 'package:PiliPlus/common/widgets/emote_tooltip.dart';
 import 'package:PiliPlus/common/widgets/gesture/tap_gesture_recognizer.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/common/widgets/image_viewer/hero.dart';
@@ -12,8 +13,8 @@ import 'package:PiliPlus/grpc/bilibili/im/interfaces/v1.pb.dart'
     show EmotionInfo;
 import 'package:PiliPlus/grpc/bilibili/im/type.pb.dart' show Msg, MsgType;
 import 'package:PiliPlus/http/search.dart';
+import 'package:PiliPlus/models/common/badge_type.dart';
 import 'package:PiliPlus/models/common/image_preview_type.dart';
-import 'package:PiliPlus/models/common/image_type.dart';
 import 'package:PiliPlus/utils/app_scheme.dart';
 import 'package:PiliPlus/utils/date_utils.dart';
 import 'package:PiliPlus/utils/duration_utils.dart';
@@ -22,9 +23,9 @@ import 'package:PiliPlus/utils/id_utils.dart';
 import 'package:PiliPlus/utils/image_utils.dart';
 import 'package:PiliPlus/utils/page_utils.dart';
 import 'package:cached_network_image_ce/cached_network_image.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:material_ui/material_ui.dart';
 
 class ChatItem extends StatelessWidget {
   static MsgType msgTypeFromValue(int value) {
@@ -84,7 +85,9 @@ class ChatItem extends StatelessWidget {
     if (!isSystem) {
       final isPic = msgType == MsgType.EN_MSG_TYPE_PIC.value; // 图片
       child = Row(
-        mainAxisAlignment: isOwner ? .end : .start,
+        mainAxisAlignment: isOwner
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         children: [
           Container(
             constraints: const BoxConstraints(maxWidth: 300.0),
@@ -93,24 +96,26 @@ class ChatItem extends StatelessWidget {
                   ? theme.colorScheme.secondaryContainer
                   : theme.colorScheme.onInverseSurface,
               borderRadius: isOwner
-                  ? const .only(
-                      topLeft: .circular(16),
-                      topRight: .circular(16),
-                      bottomLeft: .circular(16),
-                      bottomRight: .circular(6),
+                  ? const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                      bottomLeft: Radius.circular(16),
+                      bottomRight: Radius.circular(6),
                     )
-                  : const .only(
-                      topLeft: .circular(16),
-                      topRight: .circular(16),
-                      bottomLeft: .circular(6),
-                      bottomRight: .circular(16),
+                  : const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                      bottomLeft: Radius.circular(6),
+                      bottomRight: Radius.circular(16),
                     ),
             ),
             padding: isPic
-                ? const .only(top: 8, bottom: 6, left: 8, right: 8)
-                : const .only(top: 8, bottom: 6, left: 12, right: 12),
+                ? const EdgeInsets.only(top: 8, bottom: 6, left: 8, right: 8)
+                : const EdgeInsets.only(top: 8, bottom: 6, left: 12, right: 12),
             child: Column(
-              crossAxisAlignment: isOwner ? .end : .start,
+              crossAxisAlignment: isOwner
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
               children: [
                 child,
                 isPic ? const SizedBox(height: 7) : const SizedBox(height: 2),
@@ -152,7 +157,7 @@ class ChatItem extends StatelessWidget {
           ),
         ),
         GestureDetector(
-          behavior: .opaque,
+          behavior: HitTestBehavior.opaque,
           onLongPress: onLongPress,
           onSecondaryTapUp: onSecondaryTapUp,
           child: child,
@@ -339,7 +344,7 @@ class ChatItem extends StatelessWidget {
                           cid: cid,
                           cover: i['cover_url'],
                           dimension: res!.dimension,
-                          title: res.title,
+                          // title: res.title,
                         );
                       }
                     } catch (err) {
@@ -411,6 +416,7 @@ class ChatItem extends StatelessWidget {
 
     return Center(
       child: Container(
+        clipBehavior: Clip.hardEdge,
         constraints: const BoxConstraints(maxWidth: 400.0),
         decoration: BoxDecoration(
           borderRadius: Style.mdRadius,
@@ -433,7 +439,7 @@ class ChatItem extends StatelessWidget {
                       cid: cid,
                       cover: content['cover'],
                       dimension: res!.dimension,
-                      title: res.title,
+                      // title: res.title,
                     );
                   }
                 } catch (err) {
@@ -448,15 +454,15 @@ class ChatItem extends StatelessWidget {
                     clipBehavior: Clip.none,
                     children: [
                       NetworkImgLayer(
+                        borderRadius: BorderRadius.zero, // 此处应为非表情类型，且默认不需要圆角
                         width: constrains.maxWidth,
                         height: constrains.maxWidth / Style.aspectRatio16x9,
                         src: content['cover'],
-                        borderRadius: const .vertical(top: Style.imgRadius),
                       ),
                       PBadge(
                         left: 6,
                         bottom: 6,
-                        type: .gray,
+                        type: PBadgeType.gray,
                         text: content['times'] == 0
                             ? '--:--'
                             : DurationUtils.formatDuration(content['times']),
@@ -537,7 +543,7 @@ class ChatItem extends StatelessWidget {
               cid: cid,
               cover: content['thumb'],
               dimension: res!.dimension,
-              title: res.title,
+              // title: res.title,
             );
           }
         };
@@ -687,14 +693,20 @@ class ChatItem extends StatelessWidget {
           final emoji = emojiMap[matchStr];
           if (emoji != null) {
             final size = emoji['size'];
+            final url = emoji['url'];
             children.add(
               WidgetSpan(
-                rawText: matchStr,
-                child: NetworkImgLayer(
-                  width: size,
-                  height: size,
-                  src: emoji['url'],
-                  type: ImageType.emote,
+                child: emoteTooltipBuilder(
+                  url: url,
+                  emote: matchStr,
+                  triggerMode: .tap,
+                  colorScheme: theme.colorScheme,
+                  child: NetworkImgLayer(
+                    width: size,
+                    height: size,
+                    src: url,
+                    type: .emote,
+                  ),
                 ),
               ),
             );

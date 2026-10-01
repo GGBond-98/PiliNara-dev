@@ -1,6 +1,13 @@
 // ignore_for_file: constant_identifier_names
 
 abstract final class SettingBoxKey {
+  static const String enableLGBar = 'enableLGBar',
+      enableStatusBarTapToTop = 'enableStatusBarTapToTop',
+      showActualVolume = 'showActualVolume',
+      enableHdsBar = 'enableHdsBar',
+      enableHdsTopBar = 'enableHdsTopBar',
+      enableHeroCoverAnimation = 'enableHeroCoverAnimation';
+
   static const String btmProgressBehavior = 'btmProgressBehavior',
       defaultVideoQa = 'defaultVideoQa',
       defaultVideoQaCellular = 'defaultVideoQaCellular',
@@ -53,6 +60,7 @@ abstract final class SettingBoxKey {
       enableInAppPip = 'enableInAppPip',
       enableInAppPipToSystemPip = 'enableInAppPipToSystemPip',
       enableAutoLongPressSpeed = 'enableAutoLongPressSpeed',
+      longPressSpeedFactor = 'longPressSpeedFactor',
       useRelativeSlide = 'useRelativeSlide',
       sliderDuration = 'sliderOffset',
       enableQuickDouble = 'enableQuickDouble',
@@ -185,6 +193,7 @@ abstract final class SettingBoxKey {
       appVolume = 'appVolume',
       enableVolumeBoost = 'enableVolumeBoost',
       downloadPath = 'downloadPath',
+      imageSavePath = 'imageSavePath',
       followOrderType = 'followOrderType',
       enableImgMenu = 'enableImgMenu',
       showDynDispute = 'showDynDispute',
@@ -194,8 +203,11 @@ abstract final class SettingBoxKey {
       mixWithOthers = 'mixWithOthers',
       removeSafeArea = 'removeSafeArea',
       angleDegrees = 'angleDegrees',
+      // 全屏方向旧默认值（平板 + 横屏适配 → 不改变当前方向）的一次性迁移标记
+      fullScreenModeMigrated = 'fullScreenModeMigrated',
       liveStream = 'liveStream',
-      enableDocProvider = 'enableDocProvider';
+      enableDocProvider = 'enableDocProvider',
+      enableEmoteTooltip = 'enableEmoteTooltip';
 
   static const String enableAiChat = 'enableAiChat',
       aiApiUrl = 'aiApiUrl',

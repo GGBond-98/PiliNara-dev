@@ -14,6 +14,7 @@ import 'package:PiliPlus/grpc/bilibili/app/listener/v1.pb.dart'
         ListOrder,
         DashItem,
         ResponseUrl;
+import 'package:PiliPlus/harmony_adapt/harmony_channel.dart';
 import 'package:PiliPlus/http/browser_ua.dart';
 import 'package:PiliPlus/http/constants.dart';
 import 'package:PiliPlus/http/loading_state.dart';
@@ -34,6 +35,7 @@ import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
 import 'package:PiliPlus/services/service_locator.dart';
 import 'package:PiliPlus/services/shutdown_timer_service.dart';
 import 'package:PiliPlus/utils/accounts.dart';
+import 'package:PiliPlus/utils/android/android_helper.dart';
 import 'package:PiliPlus/utils/connectivity_utils.dart';
 import 'package:PiliPlus/utils/extension/iterable_ext.dart';
 import 'package:PiliPlus/utils/extension/num_ext.dart';
@@ -75,6 +77,8 @@ class AudioController extends GetxController
   final audioItem = Rxn<DetailItem>();
 
   bool _hasInit = false;
+  // 首次拉起媒体是否自动播放（跨设备接续恢复暂停状态时为 false）
+  bool _autoplayOnOpen = true;
   @override
   Player? player;
   late int cacheAudioQa;
@@ -86,13 +90,38 @@ class AudioController extends GetxController
   late final AnimationController animController;
 
   List<StreamSubscription>? _subscriptions;
+  StreamSubscription<bool>? _networkScopeSub;
+  // _queryPlayUrl 无重入保护，链路翻转可能与首次取流撞在一起
+  bool _queryingPlayUrl = false;
 
   int? index;
   List<DetailItem>? playlist;
 
   late double speed = 1.0;
 
+  void setSpeed(double value) {
+    if (player case final player?) {
+      speed = value;
+      player.setRate(value);
+      _updatePlaybackState();
+    }
+  }
+
   late final Rx<PlayRepeat> playMode = Pref.audioPlayMode.obs;
+  StreamSubscription<PlayRepeat>? _playModeSub;
+  Future<void> Function(PlayRepeat)? _savedOnRepeatModeChanged;
+
+  /// 自动续播抑制窗口：单曲/列表循环播完瞬间不上报暂停/完成，
+  /// 避免鸿蒙后台连续任务被停（第二遍播几秒后被系统冻结/杀掉）。
+  DateTime? _suppressPauseUntil;
+
+  bool get _suppressPauseReport =>
+      _suppressPauseUntil != null &&
+      DateTime.now().isBefore(_suppressPauseUntil!);
+
+  bool get _autoContinue =>
+      playMode.value == PlayRepeat.singleCycle ||
+      playMode.value == PlayRepeat.listCycle;
 
   @override
   late final isLogin = Accounts.main.isLogin;
@@ -103,11 +132,28 @@ class AudioController extends GetxController
   String? _prev;
   String? _next;
   bool get reachStart => _prev == null;
+  Future<bool>? Function()? _savedOnSkipToPrevious;
+  Future<bool>? Function()? _savedOnSkipToNext;
 
   ListOrder order = ListOrder.ORDER_NORMAL;
 
   double? _lastVolume;
   late final RxDouble desktopVolume = RxDouble(Pref.desktopVolume);
+
+  Timer? _statusTimer;
+
+  void _startStatusTimer() {
+    _statusTimer?.cancel();
+    _statusTimer = Timer(
+      const Duration(milliseconds: 500),
+      _updatePlaybackState,
+    );
+  }
+
+  void _stopStatusTimer() {
+    _statusTimer?.cancel();
+    _statusTimer = null;
+  }
 
   void toggleVolume() {
     if (_lastVolume == null) {
@@ -155,6 +201,8 @@ class AudioController extends GetxController
         _videoDetailController = Get.find<VideoDetailController>(tag: heroTag);
       } catch (_) {}
     }
+    _autoplayOnOpen = args['autoplay'] ?? true;
+    HarmonyChannel.holdContinuation(this);
 
     _queryPlayList(isInit: true);
 
@@ -175,10 +223,27 @@ class AudioController extends GetxController
         _queryPlayUrl();
       }
     });
-    videoPlayerServiceHandler
-      ?..onPlay = onPlay
-      ..onPause = onPause
-      ..onSeek = onSeek;
+    final handler = videoPlayerServiceHandler;
+    if (handler != null) {
+      handler
+        ..onPlay = onPlay
+        ..onPause = onPause
+        ..onSeek = onSeek;
+      _savedOnSkipToPrevious = handler.onSkipToPrevious;
+      _savedOnSkipToNext = handler.onSkipToNext;
+      handler.onSkipToPrevious = () async => playPrev();
+      handler.onSkipToNext = () async => playNext();
+      // 循环模式：应用→播控中心（实况窗图标），播控中心→应用（点按钮切换）
+      _savedOnRepeatModeChanged = handler.onRepeatModeChanged;
+      handler.onRepeatModeChanged = (repeat) async {
+        playMode.value = repeat;
+        GStorage.setting.put(SettingBoxKey.audioPlayMode, repeat.index);
+      };
+      handler.updateRepeatMode(playMode.value);
+      _playModeSub = playMode.listen(
+        (m) => videoPlayerServiceHandler?.updateRepeatMode(m),
+      );
+    }
 
     animController = AnimationController(
       vsync: this,
@@ -206,6 +271,7 @@ class AudioController extends GetxController
 
   Future<void>? onSeek(Duration duration) {
     if (kDebugMode) debugPrint('AudioController: onSeek to $duration');
+    _updatePlaybackState(position: duration);
     return player?.seek(duration);
   }
 
@@ -279,19 +345,45 @@ class AudioController extends GetxController
     }
   }
 
+  /// 链路在「宽带档 / 蜂窝档」之间翻转：改用该档的默认音质重新取流，
+  /// 保留当前进度与播放/暂停状态。
+  Future<void> _onNetworkScopeChanged(bool useCellular) async {
+    if (isClosed) return;
+    cacheAudioQa = useCellular
+        ? Pref.defaultAudioQaCellular
+        : Pref.defaultAudioQa;
+    final player = this.player;
+    // 正在取流时丢弃本次事件即可：那次取流会用上面刚写入的 cacheAudioQa
+    if (player == null || _queryingPlayUrl) return;
+    final previousStart = _start;
+    _start = player.state.position;
+    _autoplayOnOpen = player.state.playing;
+    // 取流失败时不会走到 _onOpenMedia，两个一次性状态需要自己还原
+    if (!await _queryPlayUrl()) {
+      _start = previousStart;
+      _autoplayOnOpen = true;
+    }
+  }
+
   Future<bool> _queryPlayUrl() async {
-    _querySponsorBlock();
-    final res = await AudioGrpc.audioPlayUrl(
-      itemType: itemType,
-      oid: oid,
-      subId: subId,
-    );
-    if (res case Success(:final response)) {
-      _onPlay(response);
-      return true;
-    } else {
-      res.toast();
-      return false;
+    if (_queryingPlayUrl) return false;
+    _queryingPlayUrl = true;
+    try {
+      _querySponsorBlock();
+      final res = await AudioGrpc.audioPlayUrl(
+        itemType: itemType,
+        oid: oid,
+        subId: subId,
+      );
+      if (res case Success(:final response)) {
+        _onPlay(response);
+        return true;
+      } else {
+        res.toast();
+        return false;
+      }
+    } finally {
+      _queryingPlayUrl = false;
     }
   }
 
@@ -317,7 +409,7 @@ class AudioController extends GetxController
         if (audios.isEmpty) {
           return;
         }
-        position.value = 0;
+        if (_start == null) position.value = 0;
         final audio = audios.findClosestTarget(
           (e) => e.id <= cacheAudioQa,
           (a, b) => a.id > b.id ? a : b,
@@ -330,7 +422,7 @@ class AudioController extends GetxController
           return;
         }
         final durl = durls.first;
-        position.value = 0;
+        if (_start == null) position.value = 0;
         _onOpenMedia(VideoUtils.getCdnUrl(durl.playUrls), volume: volume);
       }
     }
@@ -343,30 +435,73 @@ class AudioController extends GetxController
     http_model.Volume? volume,
   }) async {
     await _initPlayerIfNeeded();
-    final extras = audioFilterExtras(volume);
-    player
-      ?..setMediaHeader(
-        userAgent: ua,
-        // mpv cannot clear referer option
-        headers: {'Referer': ?referer},
-      )
-      ..open(Media(url, start: _start, extras: extras));
+    // 上游改用 player.setMediaHeader() + Media(extras:)；鸿蒙的 media_kit fork
+    // (feat-ohos) 还没有 setMediaHeader，仍走 Media(httpHeaders:)，音频滤镜参数
+    // 一并挂在同一个 Media 的 extras 上。
+    player?.open(
+      Media(
+        url,
+        start: _start,
+        httpHeaders: {
+          'user-agent': ua,
+          'referer': ?referer,
+        },
+        extras: audioFilterExtras(volume),
+      ),
+      play: _autoplayOnOpen,
+    );
+    _autoplayOnOpen = true;
     _start = null;
+  }
+
+  PlayerStatus _playerStatus = .paused;
+  void _updatePlaybackState({Duration? position, String? debugLabel}) {
+    // 鸿蒙：自动续播/自然播完的抑制窗口内不上报暂停、完成等非播放态，
+    // 避免后台连续播放任务被系统冻结（详见 _suppressPauseUntil/_autoContinue）
+    if (_playerStatus != .playing) {
+      if (_suppressPauseReport) return;
+      if (_playerStatus == .paused &&
+          _autoContinue &&
+          this.duration.value > 2 &&
+          this.position.value >= this.duration.value - 2) {
+        return;
+      }
+    }
+    videoPlayerServiceHandler?.onUpdateState(
+      _playerStatus,
+      false,
+      false,
+      position: position ?? player!.state.position,
+      speed: speed,
+      debugLabel: debugLabel,
+    );
   }
 
   Future<void> _initPlayerIfNeeded() async {
     if (_hasInit) return;
     _hasInit = true;
     assert(player == null, _subscriptions = null);
-    player = await Player.create(
+    player = Player(
       configuration: PlayerConfiguration(
-        options: {
-          if (Platform.isAndroid) 'ao': Pref.audioOutput,
-          'volume': PlatformUtils.isDesktop
-              ? (desktopVolume.value * 100).toString()
-              : (Pref.enableAppVolume ? 100.0 : Pref.playerVolume).toString(),
-          'volume-max': kMaxVolume.toString(),
-          ...Pref.initBuffer(),
+        // 上游用 PlayerConfiguration(options:)，鸿蒙的 media_kit fork 没有这个
+        // 字段，仍在 ready 回调里逐条 setProperty；'ao' 是安卓的音频输出后端，
+        // 鸿蒙不适用。
+        ready: () async {
+          final platform = player?.platform;
+          if (platform is! NativePlayer) return;
+          if (Platform.isAndroid) {
+            await platform.setProperty('ao', Pref.audioOutput);
+          }
+          await platform.setProperty('volume-max', kMaxVolume.toString());
+          await platform.setProperty(
+            'volume',
+            PlatformUtils.isDesktop
+                ? (desktopVolume.value * 100).toString()
+                : (Pref.enableAppVolume ? 100.0 : Pref.playerVolume).toString(),
+          );
+          for (final entry in Pref.initBuffer().entries) {
+            await platform.setProperty(entry.key, entry.value);
+          }
         },
       ),
     );
@@ -381,33 +516,45 @@ class AudioController extends GetxController
         if (isDragging) return;
         final seconds = position.inSeconds;
         if (seconds != this.position.value) {
+          if (seconds == 0 && _playerStatus.isPlaying) {
+            _updatePlaybackState(position: position);
+          }
           this.position.value = seconds;
           _videoDetailController?.playedTime = position;
-          videoPlayerServiceHandler?.onPositionChange(position);
         }
       }),
       stream.duration.listen((duration) {
         this.duration.value = duration.inSeconds;
       }),
       stream.playing.listen((playing) {
-        final PlayerStatus playerStatus;
         if (playing) {
           animController.forward();
-          playerStatus = PlayerStatus.playing;
+          _playerStatus = .playing;
+          _stopStatusTimer();
+          _updatePlaybackState();
         } else {
           animController.reverse();
-          playerStatus = PlayerStatus.paused;
+          _playerStatus = .paused;
+          _startStatusTimer();
         }
-        videoPlayerServiceHandler?.onStatusChange(playerStatus, false, false);
+      }),
+      stream.buffering.listen((bool buffering) {
+        if (!_playerStatus.isCompleted) {
+          _stopStatusTimer();
+          _updatePlaybackState();
+        }
       }),
       stream.completed.listen((completed) {
         _videoDetailController?.playedTime = player!.state.duration;
-        videoPlayerServiceHandler?.onStatusChange(
-          PlayerStatus.completed,
-          false,
-          false,
-        );
         if (completed) {
+          _playerStatus = .completed;
+          _startStatusTimer();
+          if (_autoContinue) {
+            // 自动续播：进入抑制窗口，不向播控中心上报完成/停止
+            _suppressPauseUntil = DateTime.now().add(
+              const Duration(seconds: 6),
+            );
+          }
           if (shutdownTimerService.isWaiting) {
             shutdownTimerService.handleWaiting();
           } else {
@@ -582,7 +729,7 @@ class AudioController extends GetxController
             child: const Text('其它app打开', style: TextStyle(fontSize: 14)),
             onPressed: () {
               Get.back();
-              PageUtils.launchURL(audioUrl);
+              PiliAndroidHelper.openUrl(audioUrl);
             },
           ),
           DialogOption(
@@ -724,13 +871,6 @@ class AudioController extends GetxController
     });
   }
 
-  void setSpeed(double speed) {
-    if (player case final player?) {
-      this.speed = speed;
-      player.setRate(speed);
-    }
-  }
-
   @override
   (Object, int) get getFavRidType => (oid, isUgc ? 2 : 12);
 
@@ -790,6 +930,8 @@ class AudioController extends GetxController
 
   @override
   void onClose() {
+    HarmonyChannel.releaseContinuation(this);
+    _stopStatusTimer();
     shutdownTimerService
       ..onPause = null
       ..isPlaying = null
@@ -798,10 +940,18 @@ class AudioController extends GetxController
       ?..onPlay = null
       ..onPause = null
       ..onSeek = null
-      ..onVideoDetailDispose(heroTag);
+      ..onVideoDetailDispose(heroTag)
+      ..onSkipToPrevious = _savedOnSkipToPrevious
+      ..onSkipToNext = _savedOnSkipToNext
+      ..onRepeatModeChanged = _savedOnRepeatModeChanged
+      ..clearIfNeeded();
+    _playModeSub?.cancel();
+    _playModeSub = null;
     _subscriptions?.forEach((e) => e.cancel());
     _subscriptions?.clear();
     _subscriptions = null;
+    _networkScopeSub?.cancel();
+    _networkScopeSub = null;
     player?.dispose();
     player = null;
     animController.dispose();

@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/button/more_btn.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/loading_widget.dart';
+import 'package:PiliPlus/common/widgets/scroll_physics.dart'
+    show platformAlwaysClampingPhysics;
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/models_new/space/space/data.dart';
 import 'package:PiliPlus/models_new/space/space/tab2.dart';
@@ -18,9 +20,9 @@ import 'package:PiliPlus/pages/member_like_arc/view.dart';
 import 'package:PiliPlus/pages/member_pgc/widgets/pgc_card_v_member_pgc.dart';
 import 'package:PiliPlus/utils/extension/context_ext.dart';
 import 'package:PiliPlus/utils/grid.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:material_ui/material_ui.dart';
 
 class MemberHome extends StatefulWidget {
   const MemberHome({super.key, this.heroTag});
@@ -63,7 +65,7 @@ class _MemberHomeState extends State<MemberHome>
   );
 
   Widget _buildBody(LoadingState<SpaceData?> loadingState) {
-    final isVertical = context.width < 600;
+    final isVertical = ContextExtensions(context).width < 600;
     final setting = _ctr.spaceSetting;
     final isOwner = setting != null;
     final color = Theme.of(context).colorScheme.outline;
@@ -72,6 +74,7 @@ class _MemberHomeState extends State<MemberHome>
       Success(response: final res) =>
         res != null
             ? CustomScrollView(
+                physics: platformAlwaysClampingPhysics,
                 slivers: [
                   if (res.archive?.item?.isNotEmpty == true) ...[
                     _header(

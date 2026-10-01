@@ -3,7 +3,6 @@ import 'package:PiliPlus/common/sliver_single_child_delegate.dart';
 import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/flutter/refresh_indicator.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
-import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/sliver/sliver_floating_header.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/grpc/bilibili/main/community/reply/v1.pb.dart'
@@ -17,9 +16,10 @@ import 'package:PiliPlus/utils/extension/widget_ext.dart';
 import 'package:PiliPlus/utils/feed_back.dart';
 import 'package:PiliPlus/utils/num_utils.dart';
 import 'package:PiliPlus/utils/utils.dart';
+import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:easy_debounce/easy_throttle.dart';
-import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:get/get.dart';
 
 class MainReplyPage extends StatefulWidget {
   const MainReplyPage({super.key});
@@ -63,7 +63,16 @@ class _MainReplyPageState extends State<MainReplyPage>
     final colorScheme = ColorScheme.of(context);
     return SimpleScaffold(
       appBar: AppBar(title: const Text('查看评论')),
-      body: fabAnimWrapper(
+      body: NotificationListener<UserScrollNotification>(
+        onNotification: (notification) {
+          final direction = notification.direction;
+          if (direction == .forward) {
+            showFab();
+          } else if (direction == .reverse) {
+            hideFab();
+          }
+          return false;
+        },
         child: refreshIndicator(
           onRefresh: _controller.onRefresh,
           child: Padding(
@@ -86,10 +95,7 @@ class _MainReplyPageState extends State<MainReplyPage>
       fab: SlideTransition(
         position: fabAnimation,
         child: Padding(
-          padding: .only(
-            right: kFloatingActionButtonMargin + padding.right,
-            bottom: kFloatingActionButtonMargin + padding.bottom,
-          ),
+          padding: .only(bottom: padding.bottom + kFloatingActionButtonMargin),
           child: FloatingActionButton(
             heroTag: null,
             onPressed: () {

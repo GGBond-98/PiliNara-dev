@@ -1,5 +1,5 @@
-import 'package:PiliPlus/common/widgets/flutter/refresh_indicator.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
+import 'package:PiliPlus/common/widgets/native_top_spacer.dart';
 import 'package:PiliPlus/common/widgets/video_card/video_card_h.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/models/model_hot_video_item.dart';
@@ -39,13 +39,16 @@ class _ZonePageState extends State<ZonePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return refreshIndicator(
-      key: HomePreviewScope.of(context) ? null : controller.refreshKey,
+    return NativeTopRefreshIndicator(
+      refreshKey: HomePreviewScope.of(context) ? null : controller.refreshKey,
       onRefresh: controller.onRefresh,
       child: CustomScrollView(
         controller: controller.scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
+          // 原生顶栏启用时顶部的可滚动留白（随列表滚动卷走，与 ArkTS
+          // 顶栏收起/展开联动）
+          const NativeTopSpacer(),
           SliverPadding(
             padding: const EdgeInsets.only(top: 7, bottom: 100),
             sliver: Obx(() => _buildBody(controller.loadingState.value)),

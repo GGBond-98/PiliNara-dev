@@ -117,12 +117,14 @@ class BounceMarquee extends Marquee {
 abstract class MarqueeRender extends RenderBox
     with RenderObjectWithChildMixin<RenderBox> {
   MarqueeRender({
-    required this._direction,
-    required this._velocity,
+    required Axis direction,
+    required double velocity,
     required double spacing,
     required this.clipBehavior,
     required ContextSingleTicker provider,
-  }) : _ticker = provider,
+  }) : _direction = direction,
+       _velocity = velocity,
+       _ticker = provider,
        _spacing = spacing,
        assert(spacing.isFinite && !spacing.isNaN);
 
@@ -394,10 +396,10 @@ class _MarqueeSimulation extends Simulation {
   bool isDone(double timeInSeconds) => false;
 
   _MarqueeSimulation copyWith({
-    double? initialValue,
-    double? addSize,
-    bool? notBounce,
-    double? velocity,
+    final double? initialValue,
+    final double? addSize,
+    final bool? notBounce,
+    final double? velocity,
   }) => _MarqueeSimulation(
     initialValue ?? this.initialValue,
     addSize == null ? size : size + addSize,

@@ -4,14 +4,13 @@ import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/button/icon_button.dart';
 import 'package:PiliPlus/common/widgets/button/toolbar_icon_button.dart';
 import 'package:PiliPlus/common/widgets/custom_icon.dart';
-import 'package:PiliPlus/common/widgets/draggable_sheet/dyn.dart';
+import 'package:PiliPlus/common/widgets/flutter/draggable_scrollable_sheet.dart';
 import 'package:PiliPlus/common/widgets/flutter/popup_menu.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/controller.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/text_field.dart';
 import 'package:PiliPlus/common/widgets/pair.dart';
-import 'package:PiliPlus/common/widgets/scroll_physics.dart'
-    show platformClampingPhysics;
 import 'package:PiliPlus/common/widgets/time_picker.dart';
+import 'package:PiliPlus/harmony_adapt/harmony_channel.dart';
 import 'package:PiliPlus/http/dynamics.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/models/common/reply/reply_option_type.dart';
@@ -33,10 +32,10 @@ import 'package:PiliPlus/utils/extension/context_ext.dart';
 import 'package:PiliPlus/utils/grid.dart';
 import 'package:PiliPlus/utils/request_utils.dart';
 import 'package:collection/collection.dart';
+import 'package:material_ui/material_ui.dart' hide showTimePicker;
 import 'package:flutter/services.dart' show LengthLimitingTextInputFormatter;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:material_ui/material_ui.dart' hide showTimePicker;
 
 class CreateDynPanel extends CommonRichTextPubPage {
   const CreateDynPanel({
@@ -49,7 +48,7 @@ class CreateDynPanel extends CommonRichTextPubPage {
     this.editConfig,
     this.title,
     this.isPrivate = false,
-    this.replyOption = .allow,
+    this.replyOption = ReplyOptionType.allow,
     this.onSuccess,
   });
 
@@ -68,36 +67,42 @@ class CreateDynPanel extends CommonRichTextPubPage {
     BuildContext context, {
     String? title,
     bool isPrivate = false,
-    ReplyOptionType replyOption = .allow,
+    ReplyOptionType replyOption = ReplyOptionType.allow,
     List<RichTextItem>? items,
     List<PicModel>? pics,
     Pair<int, String>? topic,
     ({Object dynId, Object? repostDynId})? editConfig,
     VoidCallback? onSuccess,
-  }) => showModalBottomSheet(
-    context: context,
-    useSafeArea: true,
-    isScrollControlled: true,
-    builder: (context) => DynDraggableScrollableSheet(
-      snap: true,
-      expand: false,
-      initialChildSize: 1,
-      minChildSize: 0,
-      maxChildSize: 1,
-      snapSizes: const [1],
-      builder: (context, scrollController) => CreateDynPanel(
-        scrollController: scrollController,
-        title: title,
-        items: items,
-        pics: pics,
-        topic: topic,
-        isPrivate: isPrivate,
-        editConfig: editConfig,
-        replyOption: replyOption,
-        onSuccess: onSuccess,
+  }) {
+    final wasVisible = HarmonyChannel.hdsBarVisible;
+    HarmonyChannel.setShellBarsHidden(true);
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      builder: (context) => DynDraggableScrollableSheet(
+        snap: true,
+        expand: false,
+        initialChildSize: 1,
+        minChildSize: 0,
+        maxChildSize: 1,
+        snapSizes: const [1],
+        builder: (context, scrollController) => CreateDynPanel(
+          scrollController: scrollController,
+          title: title,
+          items: items,
+          pics: pics,
+          topic: topic,
+          isPrivate: isPrivate,
+          editConfig: editConfig,
+          replyOption: replyOption,
+          onSuccess: onSuccess,
+        ),
       ),
-    ),
-  );
+    ).then((_) {
+      if (wasVisible) HarmonyChannel.setShellBarsHidden(false);
+    });
+  }
 }
 
 class _CreateDynPanelState extends CommonRichTextPubPageState<CreateDynPanel> {
@@ -139,7 +144,7 @@ class _CreateDynPanelState extends CommonRichTextPubPageState<CreateDynPanel> {
           child: ListView(
             padding: EdgeInsets.zero,
             controller: widget.scrollController,
-            physics: platformClampingPhysics,
+            physics: const ClampingScrollPhysics(),
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -180,7 +185,7 @@ class _CreateDynPanelState extends CommonRichTextPubPageState<CreateDynPanel> {
                             TextSpan(
                               children: [
                                 WidgetSpan(
-                                  alignment: .middle,
+                                  alignment: PlaceholderAlignment.middle,
                                   child: Padding(
                                     padding: const EdgeInsets.only(right: 5),
                                     child: Icon(
@@ -229,7 +234,7 @@ class _CreateDynPanelState extends CommonRichTextPubPageState<CreateDynPanel> {
                   decoration: InputDecoration(
                     hintText: '标题，选填20字',
                     isDense: true,
-                    visualDensity: .standard,
+                    visualDensity: VisualDensity.standard,
                     contentPadding: EdgeInsets.zero,
                     border: const OutlineInputBorder(
                       gapPadding: 0,
@@ -309,7 +314,7 @@ class _CreateDynPanelState extends CommonRichTextPubPageState<CreateDynPanel> {
                   }),
                   child: const SizedBox.square(
                     dimension: 100,
-                    child: Icon(Icons.add, size: 35),
+                    child: Center(child: Icon(Icons.add, size: 35)),
                   ),
                 ),
               ),
@@ -499,6 +504,8 @@ class _CreateDynPanelState extends CommonRichTextPubPageState<CreateDynPanel> {
           onPressed: _isEdit || _isPrivate.value
               ? null
               : () async {
+                  // 鸿蒙适配：弹出选择器期间冻结聊天面板，避免面板高度被重置
+                  controller.keepChatPanel();
                   DateTime nowDate = DateTime.now();
                   final selectedDate = await showDatePicker(
                     context: context,
@@ -544,6 +551,7 @@ class _CreateDynPanelState extends CommonRichTextPubPageState<CreateDynPanel> {
                       );
                     }
                   }
+                  controller.restoreChatPanel();
                 },
           child: const Text('定时发布'),
         )
@@ -584,7 +592,7 @@ class _CreateDynPanelState extends CommonRichTextPubPageState<CreateDynPanel> {
 
   @override
   Widget buildMorePanel() {
-    double height = context.isTablet ? 300 : 170;
+    double height = ContextExtensions(context).isTablet ? 300 : 170;
     final keyboardHeight = controller.keyboardHeight;
     if (keyboardHeight != 0) {
       height = max(height, keyboardHeight);
@@ -627,7 +635,7 @@ class _CreateDynPanelState extends CommonRichTextPubPageState<CreateDynPanel> {
     return SizedBox(
       height: height,
       child: GridView(
-        physics: platformClampingPhysics,
+        physics: const ClampingScrollPhysics(),
         padding: const EdgeInsets.only(left: 12, bottom: 12, right: 12),
         gridDelegate: SliverGridDelegateWithExtentAndRatio(
           maxCrossAxisExtent: 65,
@@ -648,6 +656,8 @@ class _CreateDynPanelState extends CommonRichTextPubPageState<CreateDynPanel> {
 
   Widget get voteBtn => ToolbarIconButton(
     onPressed: () async {
+      // 鸿蒙适配：跳转投票页期间冻结聊天面板
+      controller.keepChatPanel();
       final voteItem = editController.items.firstWhereOrNull(
         (e) => e.type == RichTextType.vote,
       );
@@ -692,6 +702,7 @@ class _CreateDynPanelState extends CommonRichTextPubPageState<CreateDynPanel> {
           );
         }
       }
+      controller.restoreChatPanel();
     },
     icon: const Icon(Icons.bar_chart_rounded, size: 24),
     tooltip: '投票',
@@ -710,7 +721,7 @@ class _CreateDynPanelState extends CommonRichTextPubPageState<CreateDynPanel> {
       onSubmitted: onSubmitted,
       decoration: InputDecoration(
         hintText: '说点什么吧',
-        visualDensity: .standard,
+        visualDensity: VisualDensity.standard,
         hintStyle: TextStyle(color: theme.colorScheme.outline),
         border: const OutlineInputBorder(
           borderSide: BorderSide.none,

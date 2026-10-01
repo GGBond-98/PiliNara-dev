@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:PiliPlus/common/utils/status_bar_tap.dart';
 import 'package:PiliPlus/common/widgets/flutter/refresh_indicator.dart'
     show RefreshIndicatorState;
 import 'package:PiliPlus/http/loading_state.dart';
@@ -64,6 +65,11 @@ abstract class CommonController<R, T> extends GetxController
   Future<void> showRefresh() =>
       refreshKey.currentState?.show() ?? onRefresh();
 
+  late final StatusBarTapObserver statusBarTap = StatusBarTapObserver(
+    scrollController: scrollController,
+    animateToTop: animateToTop,
+  );
+
   bool isLoading = false;
   Rx<LoadingState> get loadingState;
 
@@ -93,7 +99,16 @@ abstract class CommonController<R, T> extends GetxController
   }
 
   @override
+  void onInit() {
+    super.onInit();
+    statusBarTap
+      ..routeName = Get.currentRoute
+      ..register();
+  }
+
+  @override
   void onClose() {
+    statusBarTap.dispose();
     scrollController.dispose();
     super.onClose();
   }

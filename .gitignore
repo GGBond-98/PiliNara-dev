@@ -22,7 +22,7 @@ Package.resolved
 # The .vscode folder contains launch configuration and tasks you configure in
 # VS Code which you may wish to be included in version control, so this line
 # is commented out by default.
-.vscode/
+.vscode/env.json
 
 # Flutter repo-specific
 /bin/cache/
@@ -166,3 +166,14 @@ CONTEXT.md
 test*
 /pubspec_overrides.yaml
 .mindfs
+
+.agents
+skills-lock.json
+
+ohos/.codegenie
+.codex/skills/deveco-cli/SKILL.md
+.claude/skills/deveco-cli/SKILL.md
+
+# 合并期临时产物（分析 dump / 探针脚本，不入库；见 AGENT.md §9）
+tool_merge/analyze_*.txt
+tool_merge/_*

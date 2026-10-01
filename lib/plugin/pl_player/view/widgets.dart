@@ -601,7 +601,10 @@ class _VideoShotImageState extends State<VideoShotImage> {
 const double _triangleHeight = 5.6;
 
 class _DanmakuTip extends SingleChildRenderObjectWidget {
-  const _DanmakuTip({this.offset = 0, super.child});
+  const _DanmakuTip({
+    this.offset = 0,
+    super.child,
+  });
 
   final double offset;
 
@@ -621,8 +624,8 @@ class _DanmakuTip extends SingleChildRenderObjectWidget {
 
 class _RenderDanmakuTip extends RenderProxyBox {
   _RenderDanmakuTip({
-    required this._offset,
-  });
+    required double offset,
+  }) : _offset = offset;
 
   double _offset;
   double get offset => _offset;
@@ -711,22 +714,21 @@ class _VideoTime extends LeafRenderObjectWidget {
 
 class _RenderVideoTime extends RenderBox {
   _RenderVideoTime({
-    required this._position,
-    required this._duration,
-  });
+    required String position,
+    required String duration,
+  }) : _position = position,
+       _duration = duration;
 
   String _duration;
   set duration(String value) {
-    if (_duration == value) return;
     _duration = value;
     final paragraph = _buildParagraph(const Color(0xFFD0D0D0), _duration);
     if (paragraph.maxIntrinsicWidth != _cache?.maxIntrinsicWidth) {
       markNeedsLayout();
-    } else {
-      markNeedsSemanticsUpdate();
     }
     _cache?.dispose();
     _cache = paragraph;
+    markNeedsSemanticsUpdate();
   }
 
   String _position;
@@ -738,7 +740,7 @@ class _RenderVideoTime extends RenderBox {
 
   ui.Paragraph? _cache;
 
-  static ui.Paragraph _buildParagraph(Color color, String time) {
+  ui.Paragraph _buildParagraph(Color color, String time) {
     final builder =
         ui.ParagraphBuilder(
             ui.ParagraphStyle(

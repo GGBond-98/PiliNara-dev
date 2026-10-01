@@ -1,14 +1,13 @@
 import 'package:PiliPlus/common/widgets/appbar/appbar.dart';
 import 'package:PiliPlus/common/widgets/flutter/pop_scope.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
-import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
-import 'package:PiliPlus/common/widgets/view_insets_safe_area.dart';
 import 'package:PiliPlus/common/widgets/view_sliver_safe_area.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/pages/common/multi_select/base.dart';
 import 'package:PiliPlus/pages/common/search/common_search_controller.dart';
-import 'package:get/get.dart';
+import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:get/get.dart';
 
 abstract class CommonSearchPageState<S extends StatefulWidget, R, T>
     extends State<S> {
@@ -40,16 +39,14 @@ abstract class CommonSearchPageState<S extends StatefulWidget, R, T>
   Widget _build(bool multiSelect) {
     return SimpleScaffold(
       appBar: _buildBar(multiSelect),
-      body: ViewInsetsSafeArea(
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          controller: controller.scrollController,
-          slivers: [
-            ViewSliverSafeArea(
-              sliver: Obx(() => _buildBody(controller.loadingState.value)),
-            ),
-          ],
-        ),
+      body: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        controller: controller.scrollController,
+        slivers: [
+          ViewSliverSafeArea(
+            sliver: Obx(() => _buildBody(controller.loadingState.value)),
+          ),
+        ],
       ),
     );
   }
@@ -73,7 +70,7 @@ abstract class CommonSearchPageState<S extends StatefulWidget, R, T>
         textAlignVertical: TextAlignVertical.center,
         decoration: InputDecoration(
           hintText: '搜索',
-          visualDensity: .standard,
+          visualDensity: VisualDensity.standard,
           border: InputBorder.none,
           suffixIcon: IconButton(
             tooltip: '清空',

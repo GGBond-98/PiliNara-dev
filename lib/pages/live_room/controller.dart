@@ -1,9 +1,11 @@
-import 'dart:async' show Timer, StreamSubscription;
-import 'dart:convert' show jsonDecode;
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:PiliPlus/common/widgets/dialog/report.dart';
 import 'package:PiliPlus/common/widgets/flutter/text_field/controller.dart';
+import 'package:PiliPlus/harmony_adapt/harmony_channel.dart';
 import 'package:PiliPlus/http/live.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/http/video.dart';
@@ -26,10 +28,12 @@ import 'package:PiliPlus/pages/live_room/send_danmaku/view.dart';
 import 'package:PiliPlus/pages/video/widgets/header_control.dart';
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/models/data_source.dart';
+import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
 import 'package:PiliPlus/plugin/pl_player/utils/danmaku_options.dart';
 import 'package:PiliPlus/services/service_locator.dart';
 import 'package:PiliPlus/tcp/live.dart';
 import 'package:PiliPlus/utils/accounts.dart';
+import 'package:PiliPlus/utils/android/bindings.g.dart';
 import 'package:PiliPlus/utils/connectivity_utils.dart';
 import 'package:PiliPlus/utils/danmaku_utils.dart';
 import 'package:PiliPlus/utils/duration_utils.dart';
@@ -129,7 +133,11 @@ class LiveRoomController extends GetxController {
   late final RxInt pageIndex = 0.obs;
   PageController? pageController;
 
-  int? currentQn = PlatformUtils.isMobile ? null : Pref.liveQuality;
+  // 同 cacheVideoQa：由 queryLiveUrl 按当前链路首次赋值，不再按平台预置
+  int? currentQn;
+  StreamSubscription<bool>? _networkScopeSub;
+  // queryLiveUrl 无重入保护，链路翻转与用户切线路可能撞在一起
+  bool _queryingLiveUrl = false;
   final currentQnDesc = ''.obs;
   final RxBool isPortrait = false.obs;
   late List<({int code, String desc})> acceptQnList = [];
@@ -204,9 +212,13 @@ class LiveRoomController extends GetxController {
   void _startSizeSub() {
     if (isPortrait.value) return;
     _stopSizeSub();
-    _sizeSub = plPlayerController.videoPlayerController?.stream.size.listen(
-      _onSizeChanged,
-    );
+    // 鸿蒙 media_kit fork 无合成的 size 流，改用 videoParams
+    _sizeSub = plPlayerController.videoPlayerController?.stream.videoParams
+        .listen((params) {
+          final w = params.w, h = params.h;
+          if (w == null || h == null || w == 0 || h == 0) return;
+          _onSizeChanged((w, h));
+        });
   }
 
   void _stopSizeSub() {
@@ -235,6 +247,12 @@ class LiveRoomController extends GetxController {
     // 直接透传构造函数传入的 fromPip 标志，因为它在 view.dart 中已经经过了校验
     isReturningFromPip = fromPip;
 
+    HarmonyChannel.holdContinuation(this);
+    // 跨设备接续等场景显式指定初始状态（听直播/暂停），优先于默认行为
+    if (Get.parameters['onlyAudio'] == 'true') {
+      plPlayerController.onlyPlayAudio.value = true;
+    }
+
     if (isReturningFromPip) {
       isPortrait.value = plPlayerController.isVertical;
       isLoaded.value = true;
@@ -242,7 +260,10 @@ class LiveRoomController extends GetxController {
       // 必须重新拉取；playerInit 会因 isReturningFromPip 跳过数据源初始化
       queryLiveUrl();
     } else {
-      queryLiveUrl(autoFullScreenFlag: true);
+      queryLiveUrl(
+        autoplay: Get.parameters['autoplay'] != 'false',
+        autoFullScreenFlag: true,
+      );
     }
     queryLiveInfoH5();
     if (Accounts.heartbeat.isLogin && !Pref.historyPause) {
@@ -273,6 +294,7 @@ class LiveRoomController extends GetxController {
     // 确保播放器处于直播模式
     plPlayerController.isLive = true;
 
+    plPlayerController.sourceOwner = this;
     return plPlayerController
         .setDataSource(
           NetworkSource(videoSource: videoUrl!, audioSource: null),
@@ -294,7 +316,40 @@ class LiveRoomController extends GetxController {
         });
   }
 
-  Future<void> queryLiveUrl({bool autoFullScreenFlag = false}) async {
+  /// 链路在「宽带档 / 蜂窝档」之间翻转：改用该档的默认清晰度重新取流，
+  /// 并沿用翻转前的播放/暂停状态。
+  void _onNetworkScopeChanged(bool useCellular) {
+    if (isClosed) return;
+    // currentQn 是本页自己的状态，无论是否持有播放器都该保持最新
+    currentQn = useCellular ? Pref.liveQualityCellular : Pref.liveQuality;
+    // 叠加的播放页只有当前持有播放器的那个才真正换流
+    if (!identical(plPlayerController.sourceOwner, this)) return;
+    // 直播没有进度可保留，正在取流时直接丢弃本次事件即可：
+    // 那次取流会用上面刚写入的 currentQn
+    if (_queryingLiveUrl) return;
+    queryLiveUrl(autoplay: plPlayerController.playerStatus.isPlaying);
+  }
+
+  Future<void> queryLiveUrl({
+    bool autoplay = true,
+    bool autoFullScreenFlag = false,
+  }) async {
+    if (_queryingLiveUrl) return;
+    _queryingLiveUrl = true;
+    try {
+      await _queryLiveUrl(
+        autoplay: autoplay,
+        autoFullScreenFlag: autoFullScreenFlag,
+      );
+    } finally {
+      _queryingLiveUrl = false;
+    }
+  }
+
+  Future<void> _queryLiveUrl({
+    required bool autoplay,
+    required bool autoFullScreenFlag,
+  }) async {
     currentQn ??= await ConnectivityUtils.isWiFi
         ? Pref.liveQuality
         : Pref.liveQualityCellular;
@@ -331,8 +386,10 @@ class LiveRoomController extends GetxController {
           formatIndex: formatIndex,
           codecIndex: codecIndex,
           liveUrlIndex: liveUrlIndex,
+          autoplay: autoplay,
+          autoFullScreenFlag: autoFullScreenFlag,
         ),
-        if (isLogin && !isLoaded.value) _fetchBlockRules(),
+        if (!isLoaded.value && Accounts.heartbeat.isLogin) _fetchBlockRules(),
       ]);
 
       // 置于 initLiveUrl 之后：恢复场景的首次拉取靠该标志让 playerInit 跳过
@@ -383,6 +440,8 @@ class LiveRoomController extends GetxController {
     int formatIndex = 0,
     int codecIndex = 0,
     int liveUrlIndex = 0,
+    bool autoplay = true,
+    bool autoFullScreenFlag = false,
   }) {
     this.streamIndex = streamIndex;
     this.formatIndex = formatIndex;
@@ -406,7 +465,10 @@ class LiveRoomController extends GetxController {
     currentQnDesc.value =
         LiveQuality.fromCode(currentQn)?.desc ?? currentQn.toString();
     videoUrl = VideoUtils.getLiveCdnUrl(item, index: liveUrlIndex);
-    return playerInit()?.whenComplete(_startSizeSub);
+    return playerInit(
+      autoplay: autoplay,
+      autoFullScreenFlag: autoFullScreenFlag,
+    )?.whenComplete(_startSizeSub);
   }
 
   // 直播投屏时，优先选择 HLS 协议的播放地址，且不使用 AV1 编码
@@ -676,6 +738,12 @@ class LiveRoomController extends GetxController {
   @override
   void onClose() {
     plPlayerController.onNeedsPlayerInit = null;
+    _networkScopeSub?.cancel();
+    _networkScopeSub = null;
+    if (identical(plPlayerController.sourceOwner, this)) {
+      plPlayerController.sourceOwner = null;
+    }
+    HarmonyChannel.releaseContinuation(this);
     _stopSizeSub();
     // 心跳定时器是静态的，无论是否小窗都要取消
     LiveHttp.cancelLiveHeartbeat();
@@ -712,7 +780,7 @@ class LiveRoomController extends GetxController {
   }
 
   void initDm(LiveDmInfoData info) {
-    if (info.hostList.isNullOrEmpty) {
+    if (info.hostList.isEmpty) {
       return;
     }
     _msgStream =
@@ -810,8 +878,10 @@ class LiveRoomController extends GetxController {
           );
           break;
         case 'SUPER_CHAT_MESSAGE' when showSuperChat:
-          final item = SuperChatItem.fromJson(obj['data']);
+          final item = SuperChatItem.fromJson(obj['data'], roomId);
           superChatMsg.insert(0, item);
+          addDm(item);
+          if (Platform.isAndroid && AndroidHelper.isPipMode) return;
           if (plPlayerController.showDanmaku &&
               (isFullScreen || plPlayerController.isDesktopPip)) {
             fsSC.value = item.copyWith(
@@ -821,7 +891,6 @@ class LiveRoomController extends GetxController {
               ),
             );
           }
-          addDm(item);
           break;
         // case 'SUPER_CHAT_MESSAGE_DELETE' when showSuperChat:
         //   if (obj['roomid'] == roomId) {

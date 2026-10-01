@@ -23,13 +23,14 @@ import 'package:PiliPlus/utils/num_utils.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:easy_debounce/easy_throttle.dart';
-import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:get/get.dart';
 
 enum DynType implements EnumWithLabel {
   repost('转发'),
   reply('评论'),
-  like('赞');
+  like('赞')
+  ;
 
   @override
   final String label;
@@ -92,14 +93,6 @@ mixin CommonDynPageMixin<T extends StatefulWidget>
     maxHeight = size.height;
     isPortrait = size.isPortrait;
     padding = MediaQuery.viewPaddingOf(context);
-  }
-
-  @override
-  bool onNotification(UserScrollNotification notification) {
-    if (notification.metrics.axisDirection == .down) {
-      return super.onNotification(notification);
-    }
-    return false;
   }
 
   Widget buildReplyHeader() {
@@ -271,7 +264,6 @@ mixin CommonDynPageMixin<T extends StatefulWidget>
         if (scaffoldState != null) {
           hideFab();
           scaffoldState.showBottomSheet(
-            constraints: const BoxConstraints(),
             (context) => replyReplyPage(showBackBtn: false),
           );
         } else {
@@ -329,10 +321,7 @@ mixin CommonDynPageMixin<T extends StatefulWidget>
       : const NoBottomPaddingFabLocation();
 
   Widget get fabButton => Padding(
-    padding: .only(
-      right: kFloatingActionButtonMargin + padding.right,
-      bottom: kFloatingActionButtonMargin + padding.bottom,
-    ),
+    padding: .only(bottom: padding.bottom + kFloatingActionButtonMargin),
     child: replyButton,
   );
 

@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// ignore_for_file: prefer_initializing_formals
-
 import 'dart:async' show Completer;
 
 import 'package:PiliPlus/common/widgets/refresh_layout.dart';
@@ -14,7 +12,8 @@ import 'package:PiliPlus/utils/platform_utils.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:extended_nested_scroll_view/refresh.dart';
 import 'package:flutter/foundation.dart' show clampDouble;
-import 'package:material_ui/material_ui.dart' hide RefreshIndicator;
+import 'package:flutter/material.dart' hide RefreshIndicator;
+import 'package:os_type/os_type.dart';
 
 const kIndicatorSize = 49.0;
 
@@ -145,6 +144,7 @@ class RefreshIndicator extends StatefulWidget {
   /// The [semanticsValue] may be used to specify progress on the widget.
   const RefreshIndicator({
     super.key,
+    this.edgeOffset = 0.0,
     required this.onRefresh,
     this.color,
     this.backgroundColor,
@@ -177,7 +177,7 @@ class RefreshIndicator extends StatefulWidget {
   ///
   ///  * [displacement], can be used to change the distance from the edge that
   ///    the indicator settles.
-  // final double edgeOffset;
+  final double edgeOffset;
 
   /// A function that's called when the user has dragged the refresh indicator
   /// far enough to demonstrate that they want the app to refresh. The returned
@@ -223,6 +223,7 @@ class RefreshIndicatorState extends State<RefreshIndicator>
   late AnimationController _scaleController;
   late Animation<double> _positionFactor;
   late Animation<double> _scaleFactor;
+  late Animation<double> _layoutScale;
   late Animation<double> _value;
   late Animation<Color?> _valueColor;
 
@@ -231,6 +232,8 @@ class RefreshIndicatorState extends State<RefreshIndicator>
   double? _dragOffset;
   late Color _effectiveValueColor;
   // late Color _backgroundColor;
+
+  static final Animatable<double> _oneTween = ConstantTween<double>(1.0);
 
   static final Animatable<double> _threeQuarterTween = Tween<double>(
     begin: 0.0,
@@ -259,6 +262,7 @@ class RefreshIndicatorState extends State<RefreshIndicator>
 
     _scaleController = AnimationController(vsync: this);
     _scaleFactor = _scaleController.drive(_oneToZeroTween);
+    _layoutScale = _scaleController.drive(_oneTween);
   }
 
   @protected
@@ -518,23 +522,31 @@ class RefreshIndicatorState extends State<RefreshIndicator>
 
     child = RefreshLayout(
       body: child,
-      scale: _scaleFactor,
+      // 布局尺寸固定，缩放交给绘制期的 ScaleTransition：RefreshLayout 收紧
+      // 布局约束时，SDK 内层的固定内边距会让弧先归零，出现圆形背景已消失
+      // 而弧仍在绘制的问题。
+      scale: _layoutScale,
       position: _positionFactor,
+      edgeOffset: widget.edgeOffset,
       indicator: _status == null
           ? null
-          : AnimatedBuilder(
-              animation: _positionController,
-              builder: (context, child) => RefreshProgressIndicator(
-                value: showIndeterminateIndicator ? null : _value.value,
-                valueColor: _valueColor,
-                backgroundColor: widget.backgroundColor,
-                strokeWidth: widget.strokeWidth,
-                elevation: widget.elevation,
+          : ScaleTransition(
+              scale: _scaleFactor,
+              child: AnimatedBuilder(
+                animation: _positionController,
+                builder: (context, child) => RefreshProgressIndicator(
+                  value: showIndeterminateIndicator ? null : _value.value,
+                  valueColor: _valueColor,
+                  backgroundColor: widget.backgroundColor,
+                  strokeWidth: widget.strokeWidth,
+                  elevation: widget.elevation,
+                ),
               ),
             ),
     );
 
-    if (PlatformUtils.isDarwin) {
+    // 鸿蒙与iOS保持一致的下拉动画
+    if (PlatformUtils.isDarwin || OS.isHarmony) {
       if (widget.isClampingScrollPhysics) {
         return ScrollConfiguration(
           behavior: RefreshScrollBehavior(

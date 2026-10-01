@@ -13,14 +13,14 @@ class NetworkImgLayer extends StatelessWidget {
     required this.src,
     required this.width,
     required this.height,
-    this.type = .def,
-    this.fadeOutDuration = const Duration(milliseconds: 120),
-    this.fadeInDuration = const Duration(milliseconds: 120),
+    this.type = ImageType.def,
+    this.fadeOutDuration = Duration.zero,
+    this.fadeInDuration = Duration.zero,
     this.quality = 1,
     this.borderRadius = Style.mdRadius,
     this.getPlaceHolder,
-    this.fit = .cover,
-    this.alignment = .center,
+    this.fit = BoxFit.cover,
+    this.alignment = Alignment.center,
     this.cacheWidth,
   });
 
@@ -62,16 +62,24 @@ class NetworkImgLayer extends StatelessWidget {
   Widget _buildImage(
     BuildContext context, {
     required bool isEmote,
-    required bool isAvatar,
+    required bool isAvatar
   }) {
     int? memCacheWidth, memCacheHeight;
-    if (cacheWidth ?? width <= height) {
+    if (cacheWidth ?? (width <= height)) {
       memCacheWidth = width.cacheSize(context);
     } else {
       memCacheHeight = height.cacheSize(context);
     }
+
     return CachedNetworkImage(
-      imageUrl: ImageUtils.thumbnailUrl(src, quality),
+      imageUrl: (isEmote)
+          ? ImageUtils.thumbnailUrl(src, quality)
+          : ImageUtils.thumbnailUrlWithSize(
+              src,
+              memCacheWidth,
+              memCacheHeight,
+              quality,
+            ),
       width: width,
       height: height,
       memCacheWidth: memCacheWidth,
@@ -102,7 +110,9 @@ class NetworkImgLayer extends StatelessWidget {
       clipBehavior: isEmote ? Clip.none : Clip.antiAlias,
       decoration: BoxDecoration(
         shape: isAvatar ? BoxShape.circle : BoxShape.rectangle,
-        color: ColorScheme.of(context).onInverseSurface.withValues(alpha: 0.4),
+        color: Theme.of(
+          context,
+        ).colorScheme.onInverseSurface.withValues(alpha: 0.4),
         borderRadius: isEmote || isAvatar ? null : borderRadius,
       ),
       child: Center(

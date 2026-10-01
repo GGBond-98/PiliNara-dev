@@ -10,9 +10,6 @@ import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/common/widgets/image_viewer/hero.dart';
 import 'package:PiliPlus/common/widgets/progress_bar/audio_video_progress_bar.dart';
 import 'package:PiliPlus/common/widgets/progress_bar/segment_progress_bar.dart';
-import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
-import 'package:PiliPlus/common/widgets/scroll_physics.dart'
-    show platformClampingPhysics;
 import 'package:PiliPlus/common/widgets/selection_text.dart';
 import 'package:PiliPlus/grpc/bilibili/app/listener/v1.pb.dart';
 import 'package:PiliPlus/models/common/image_preview_type.dart';
@@ -42,11 +39,12 @@ import 'package:PiliPlus/utils/platform_utils.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/utils.dart';
+import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:material_ui/material_ui.dart' hide DraggableScrollableSheet;
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
-import 'package:material_ui/material_ui.dart' hide DraggableScrollableSheet;
 
 class AudioPage extends StatefulWidget {
   const AudioPage({super.key});
@@ -64,6 +62,7 @@ class AudioPage extends StatefulWidget {
     Duration? start,
     String? audioUrl,
     int? extraId,
+    bool autoplay = true,
   }) {
     heroTag ??= Utils.makeHeroTag(oid);
     return Get.toNamed(
@@ -78,6 +77,7 @@ class AudioPage extends StatefulWidget {
         'start': ?start,
         'audioUrl': ?audioUrl,
         'extraId': ?extraId,
+        'autoplay': autoplay,
       },
     );
   }
@@ -236,7 +236,8 @@ class _AudioPageState extends State<AudioPage> {
           maxWidth: min(640, context.mediaQueryShortestSide),
         ),
         builder: (context) {
-          final colorScheme = ColorScheme.of(context);
+          final theme = Theme.of(context);
+          final colorScheme = theme.colorScheme;
           Widget child = CustomScrollView(
             controller: scrollController,
             physics: _controller.reachStart
@@ -263,6 +264,7 @@ class _AudioPageState extends State<AudioPage> {
                         initiallyExpanded: isCurr,
                         collapsedIconColor: isCurr ? colorScheme.primary : null,
                         iconColor: isCurr ? null : colorScheme.onSurfaceVariant,
+                        controlAffinity: ListTileControlAffinity.leading,
                         title: Text(
                           item.arc.title,
                           maxLines: 1,
@@ -443,8 +445,11 @@ class _AudioPageState extends State<AudioPage> {
                 ),
                 Expanded(
                   child: Material(
-                    type: .transparency,
-                    child: child,
+                    type: MaterialType.transparency,
+                    child: Theme(
+                      data: theme.copyWith(dividerColor: Colors.transparent),
+                      child: child,
+                    ),
                   ),
                 ),
                 Divider(
@@ -668,7 +673,7 @@ class _AudioPageState extends State<AudioPage> {
                     dense: true,
                     leading: const Icon(Icons.volume_up, size: 20),
                     title: Text(
-                      '播放器音量: ${player.getProperty('volume').subLength(3)}%',
+                      '播放器音量: ${player.state.volume.toStringAsFixed(0)}%',
                       style: const TextStyle(fontSize: 14),
                     ),
                     onTap: () {
@@ -792,7 +797,7 @@ class _AudioPageState extends State<AudioPage> {
   void _onSeek(int milliseconds) {
     _controller
       ..isDragging = false
-      ..player?.seek(Duration(milliseconds: milliseconds));
+      ..onSeek(Duration(milliseconds: milliseconds));
   }
 
   Widget _buildProgressBar(ColorScheme colorScheme) {
@@ -940,10 +945,9 @@ class _AudioPageState extends State<AudioPage> {
             Expanded(
               child: Center(
                 child: ListView(
-                  padding: .zero,
-                  shrinkWrap: true,
-                  physics: platformClampingPhysics,
                   key: const PageStorageKey(_AudioPageState),
+                  shrinkWrap: true,
+                  physics: const ClampingScrollPhysics(),
                   children: [
                     Center(
                       child: GestureDetector(
@@ -1030,7 +1034,9 @@ class _AudioPageState extends State<AudioPage> {
                     ),
                     if (audioItem.arc.hasDesc()) ...[
                       const SizedBox(height: 10),
-                      SelectionText(audioItem.arc.desc),
+                      SelectionText(
+                        audioItem.arc.desc,
+                      ),
                     ],
                   ],
                 ),

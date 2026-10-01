@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:PiliPlus/common/widgets/avatars.dart';
 import 'package:PiliPlus/common/widgets/badge.dart';
+import 'package:PiliPlus/common/widgets/cached_layout_builder.dart';
 import 'package:PiliPlus/common/widgets/dialog/report.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/http/dynamics.dart';
@@ -18,8 +19,8 @@ import 'package:PiliPlus/utils/num_utils.dart';
 import 'package:PiliPlus/utils/page_utils.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
 import 'package:collection/collection.dart';
-import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:get/get.dart';
 
 class VotePanel extends StatefulWidget {
   final VoteInfo voteInfo;
@@ -147,14 +148,14 @@ class _VotePanelState extends State<VotePanel> {
     if (isLogin) {
       title = Row(
         spacing: 3,
-        crossAxisAlignment: .start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(child: title),
           Obx(() {
             final list = followeeVote.value;
             if (list != null && list.isNotEmpty) {
               return GestureDetector(
-                behavior: .opaque,
+                behavior: HitTestBehavior.opaque,
                 onTap: () {
                   showDialog(
                     context: context,
@@ -212,7 +213,7 @@ class _VotePanelState extends State<VotePanel> {
                   );
                 },
                 child: Row(
-                  mainAxisSize: .min,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     avatars(
                       colorScheme: theme.colorScheme,
@@ -317,7 +318,10 @@ class _VotePanelState extends State<VotePanel> {
           .toList(),
     );
     return Card(
-      shape: const RoundedRectangleBorder(borderRadius: .all(.circular(6))),
+      clipBehavior: Clip.hardEdge,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(6)),
+      ),
       child: Builder(
         builder: (context) {
           final opt = _voteInfo.options[index];
@@ -328,22 +332,21 @@ class _VotePanelState extends State<VotePanel> {
                 : () => _onSelected(context, !selected, opt.optIdx!),
             onLongPress: PlatformUtils.isMobile ? onLongPress : null,
             onSecondaryTap: PlatformUtils.isDesktop ? onLongPress : null,
-            borderRadius: const .all(.circular(6)),
             child: Column(
               spacing: 5,
-              crossAxisAlignment: .stretch,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Stack(
                   clipBehavior: Clip.none,
                   children: [
                     AspectRatio(
                       aspectRatio: 1,
-                      child: LayoutBuilder(
+                      child: CachedLayoutBuilder(
                         builder: (context, constraints) => NetworkImgLayer(
                           src: opt.imgUrl,
                           width: constraints.maxWidth,
                           height: constraints.maxHeight,
-                          borderRadius: const .vertical(top: .circular(6)),
+                          type: .emote,
                         ),
                       ),
                     ),

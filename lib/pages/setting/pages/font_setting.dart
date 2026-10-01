@@ -38,14 +38,18 @@ class _FontSettingPageState extends State<FontSettingPage> {
     .windows => Typography.whiteRedmond,
     .macOS => Typography.whiteRedwoodCity,
     .linux => Typography.whiteHelsinki,
+    // ↓↓↓ 适配flutter 3.32.4-ohos-0.0.1：TargetPlatform 多出 .ohos 一档，
+    // 这里只是预览用的平台默认字体族；取不到该族时由系统字体兜底
+    _ => Typography.whiteMountainView,
   }).bodyMedium?.fontFamily;
 
   // ignore: deprecated_member_use
   static final _normalFontWeight = FontWeight.normal.index;
 
   String? _selectedFont = Pref.appFont;
-  // ignore: deprecated_member_use
-  int _selectedWeight = Pref.appFontWeight.index;
+
+  /// `-1` = 跟随系统字重（鸿蒙保留的一档，见 [Pref.appFontWeight]）
+  int _selectedWeight = Pref.appFontWeight;
   double _selectedScale = Pref.defaultTextScale;
 
   /// 弹幕字体选择：DanmakuFontSource 或已导入字体的池 key
@@ -197,7 +201,7 @@ class _FontSettingPageState extends State<FontSettingPage> {
           TextButton(
             onPressed: () => setState(() {
               _selectedFont = null;
-              _selectedWeight = _normalFontWeight;
+              _selectedWeight = -1;
               _selectedScale = 1;
             }),
             child: const Text('重置'),
@@ -231,7 +235,9 @@ class _FontSettingPageState extends State<FontSettingPage> {
                       '注：部分字体可能无法应用',
                       style: TextStyle(
                         fontFamily: _selectedFont ?? _kDefaultFontFamily,
-                        fontWeight: FontWeight.values[_selectedWeight],
+                        fontWeight: _selectedWeight == -1
+                            ? .normal
+                            : FontWeight.values[_selectedWeight],
                         fontSize: 14 * _selectedScale,
                       ),
                     ),
@@ -307,20 +313,29 @@ class _FontSettingPageState extends State<FontSettingPage> {
                   const Text('字重：', style: TextStyle(fontWeight: .bold)),
                   const SizedBox(
                     width: 40,
-                    child: Text(
-                      'w100',
-                      style: TextStyle(fontWeight: .w100),
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(text: '跟随系统/\n'),
+                          TextSpan(
+                            text: 'w100',
+                            style: TextStyle(fontWeight: .w100),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   Expanded(
                     child: Slider(
                       padding: .zero,
                       value: _selectedWeight.toDouble(),
-                      min: 0,
+                      min: -1,
                       max: 8,
-                      divisions: 8,
+                      divisions: 9,
                       secondaryTrackValue: _normalFontWeight.toDouble(),
-                      label: 'w${(_selectedWeight + 1) * 100}',
+                      label: _selectedWeight == -1
+                          ? '跟随系统'
+                          : 'w${(_selectedWeight + 1) * 100}',
                       onChanged: (value) {
                         setState(() => _selectedWeight = value.toInt());
                       },

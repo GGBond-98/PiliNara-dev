@@ -19,6 +19,7 @@ import 'package:PiliPlus/common/widgets/player_bar.dart';
 import 'package:PiliPlus/common/widgets/progress_bar/audio_video_progress_bar.dart';
 import 'package:PiliPlus/common/widgets/progress_bar/segment_progress_bar.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
+import 'package:PiliPlus/media_kit_adapt/simple_video.dart';
 import 'package:PiliPlus/models/common/sponsor_block/action_type.dart';
 import 'package:PiliPlus/models/common/sponsor_block/post_segment_model.dart';
 import 'package:PiliPlus/models/common/sponsor_block/segment_type.dart';
@@ -45,6 +46,7 @@ import 'package:PiliPlus/plugin/pl_player/models/gesture_type.dart';
 import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
 import 'package:PiliPlus/plugin/pl_player/models/speed_lock_hint.dart';
 import 'package:PiliPlus/plugin/pl_player/models/video_fit_type.dart';
+import 'package:PiliPlus/plugin/pl_player/utils/fullscreen.dart';
 import 'package:PiliPlus/plugin/pl_player/widgets/app_bar_ani.dart';
 import 'package:PiliPlus/plugin/pl_player/widgets/backward_seek.dart';
 import 'package:PiliPlus/plugin/pl_player/widgets/bottom_control.dart';
@@ -53,16 +55,20 @@ import 'package:PiliPlus/plugin/pl_player/widgets/forward_seek.dart';
 import 'package:PiliPlus/plugin/pl_player/widgets/mpv_convert_webp.dart';
 import 'package:PiliPlus/plugin/pl_player/widgets/play_pause_btn.dart';
 import 'package:PiliPlus/plugin/pl_player/widgets/speed_lock_arrows.dart';
+import 'package:PiliPlus/plugin/pl_player/widgets/top_inset_padding.dart';
 import 'package:PiliPlus/utils/android/bindings.g.dart';
 import 'package:PiliPlus/utils/cache_manager.dart';
 import 'package:PiliPlus/utils/duration_utils.dart';
 import 'package:PiliPlus/utils/extension/num_ext.dart';
 import 'package:PiliPlus/utils/extension/theme_ext.dart';
+import 'package:PiliPlus/utils/feed_back.dart';
 import 'package:PiliPlus/utils/id_utils.dart';
 import 'package:PiliPlus/utils/image_utils.dart';
 import 'package:PiliPlus/utils/mobile_observer.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
+import 'package:PiliPlus/utils/storage.dart';
+import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:canvas_danmaku/canvas_danmaku.dart';
@@ -81,6 +87,8 @@ import 'package:get/get.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:os_type/os_type.dart';
+import 'package:screen_brightness_platform_interface/constant/plugin_channel.dart';
 import 'package:screen_brightness_platform_interface/screen_brightness_platform_interface.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -100,6 +108,7 @@ class PLVideoPlayer extends StatefulWidget {
     this.showViewPoints,
     this.isPipMode = false,
     this.isInAppPip = false,
+    this.topInset,
     this.fill = Colors.black,
     this.alignment = Alignment.center,
     super.key,
@@ -128,6 +137,11 @@ class PLVideoPlayer extends StatefulWidget {
   /// 应用内小窗（我们独有的浮窗，非系统 PiP）。
   /// 窗口过小时不渲染字幕，避免（尤其是双语）字幕挤占画面。
   final bool isInAppPip;
+
+  /// 竖屏全屏时顶部控件的固定避让高度（进全屏前捕获的状态栏/挖孔高度），
+  /// null 表示不避让
+  final double? topInset;
+
   final Color fill;
   final Alignment alignment;
 
@@ -138,7 +152,13 @@ class PLVideoPlayer extends StatefulWidget {
 class _PLVideoPlayerState extends State<PLVideoPlayer>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   late AnimationController _animationController;
-  late VideoController videoController;
+
+  /// 底层播放器控制器。直接向 controller 取值并允许为空：播放器可能在本页挂
+  /// 载之后才就绪，也可能在换源/退后台清内存时先一步被释放。为空时 [build] 只
+  /// 渲染空占位，等 controller 变化（Rx 通知父级守卫重建）后再渲染视频层，
+  /// 而不是在 initState 里空断言打崩整个播放页。
+  VideoController? get videoController => plPlayerController.videoController;
+
   late final CommonIntroController introController = widget.introController!;
   late final VideoDetailController videoDetailController =
       widget.videoDetailController!;
@@ -166,6 +186,10 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
     }
   }
 
+  /// 亮度事件通道在鸿蒙侧可能下发 null/整数，`.cast<double>()` 会把
+  /// 类型错误抛成全局未捕获异常，这里就地吞掉
+  void _onBrightnessError(Object e) => debugPrint('屏幕亮度事件异常: $e');
+
   void _getSystemBrightness() {
     ScreenBrightnessPlatform.instance.system.then((res) {
       if (mounted) {
@@ -185,7 +209,9 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
   void _onVolumeChanged(double value) {
     if (mounted && !plPlayerController.volumeInterceptEventStream) {
       plPlayerController.volume.value = value;
-      if (Platform.isIOS && !FlutterVolumeController.showSystemUI) {
+      plPlayerController.actualVolume.value = value;
+      if (Platform.isIOS && !FlutterVolumeController.showSystemUI ||
+          OS.isHarmony) {
         plPlayerController
           ..volumeIndicator.value = true
           ..volumeTimer?.cancel()
@@ -290,7 +316,6 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
         }
       });
     }
-    videoController = plPlayerController.videoController!;
 
     if (PlatformUtils.isMobile) {
       Future.microtask(() async {
@@ -306,12 +331,20 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
                 // 只更新系统音量记录，不影响播放器音量和指示器显示
                 plPlayerController.systemVolume.value = value;
               }
-            }, emitOnStart: false);
+              },
+              // The plugin defaults to ambient and overwrites AVAudioSession.
+              // Keep media playback audible regardless of listener/mpv init order.
+              category: AudioSessionCategory.playback,
+              emitOnStart: false,
+            );
           } else {
             FlutterVolumeController.updateShowSystemUI(true);
             _getCurrVolume();
             FlutterVolumeController.addListener(
               _onVolumeChanged,
+              // The plugin defaults to ambient and overwrites AVAudioSession.
+              // Keep media playback audible regardless of listener/mpv init order.
+              category: AudioSessionCategory.playback,
               emitOnStart: false,
             );
           }
@@ -323,15 +356,32 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
             _brightnessListener = ScreenBrightnessPlatform
                 .instance
                 .onSystemScreenBrightnessChanged
-                .listen(_onBrightnessChanged);
+                .listen(_onBrightnessChanged, onError: _onBrightnessError);
           } else {
             _getAppBrightness();
             _brightnessListener = ScreenBrightnessPlatform
                 .instance
                 .onApplicationScreenBrightnessChanged
-                .listen(_onBrightnessChanged);
+                .listen(_onBrightnessChanged, onError: _onBrightnessError);
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('监听屏幕亮度失败: $e');
+          if (OS.isHarmony) {
+            // 鸿蒙侧下发的是 number，标准 Stream<double> 监听会抛错
+            _harmonyBrightnessChanged ??=
+                pluginEventChannelApplicationBrightnessChanged
+                    .receiveBroadcastStream()
+                    .cast<num>();
+            _harmonyBrightnessSub ??= _harmonyBrightnessChanged!.listen(
+              (num value) {
+                if (mounted) {
+                  _brightnessValue.value = value.toDouble();
+                }
+              },
+              onError: _onBrightnessError,
+            );
+          }
+        }
       });
     }
 
@@ -367,24 +417,50 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
     );
   }
 
+  Stream<num>? _harmonyBrightnessChanged;
+  StreamSubscription<num>? _harmonyBrightnessSub;
+
+  StreamSubscription<bool>? _harmonyBackPlayingSub;
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    final player = plPlayerController.videoPlayerController;
+    if (player == null) return;
+    if (state != AppLifecycleState.paused &&
+        state != AppLifecycleState.detached) {
+      plPlayerController.autoResumeInPipIfNeeded();
+    }
     if (!plPlayerController.continuePlayInBackground.value) {
-      late final player = plPlayerController.videoPlayerController;
       if (const <AppLifecycleState>[.paused, .detached].contains(state)) {
-        if (player != null && player.state.playing) {
+        // 画中画中收到的 paused 来自进入 PiP 时的退后台（鸿蒙），视频仍然
+        // 可见，不算后台，不应暂停。PiP 关闭且留在后台时，插件先推
+        // isPipMode=false 再补发 paused，此处仍会正常暂停。
+        if (plPlayerController.isPipMode) return;
+        if (player.state.playing) {
           _pauseDueToPauseUponEnteringBackgroundMode = true;
           player.pause();
         }
       } else {
         if (_pauseDueToPauseUponEnteringBackgroundMode) {
           _pauseDueToPauseUponEnteringBackgroundMode = false;
-          player?.play();
+          player.play();
         }
       }
       // 后台播放关了，本功能不运行，转发生命周期以取消定时器
       plPlayerController.handleAutoAudioOnlyLifecycle(state);
       return;
+    } else if (OS.isHarmony) {
+      // 需要后台播放，防止鸿蒙切到后台被系统暂停
+      _harmonyBackPlayingSub?.cancel();
+      _harmonyBackPlayingSub = player.stream.playing.listen((playing) {
+        if (!playing) {
+          player.play();
+          _harmonyBackPlayingSub?.cancel();
+        }
+      });
+      Future.delayed(const Duration(seconds: 3)).then((_) {
+        _harmonyBackPlayingSub?.cancel();
+      });
     }
     plPlayerController.handleAutoAudioOnlyLifecycle(state);
   }
@@ -414,6 +490,8 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
 
   @override
   void dispose() {
+    FlutterVolumeController.updateShowSystemUI(true);
+    _harmonyBackPlayingSub?.cancel();
     removeObserverMobile(this);
     _danmakuListener?.cancel();
     _tapGestureRecognizer.dispose();
@@ -421,6 +499,8 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
     _doubleTapGestureRecognizer.dispose();
     _scaleGestureRecognizer.dispose();
     _brightnessListener?.cancel();
+    _harmonyBrightnessSub?.cancel();
+    _harmonyBrightnessSub = null;
     _controlsListener?.cancel();
     _animationController.dispose();
     _transformationController
@@ -572,6 +652,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
       BottomControlType.viewPoints => Obx(
         () {
           if (videoDetailController.viewPointList.isNotEmpty) {
+            final show = videoDetailController.showVP.value;
             final viewPoints = videoDetailController.viewPointList;
             final positionSec = plPlayerController.position.value;
             // Find current segment
@@ -651,7 +732,9 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
               height: 30,
               tooltip: '分段信息',
               icon: DisabledIcon(
-                disable: !videoDetailController.showVP.value,
+                iconSize: 22,
+                color: Colors.white,
+                disable: !show,
                 child: const Icon(
                   CustomIcons.view_headline_rotate_90,
                   size: 22,
@@ -659,6 +742,13 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
                 ),
               ),
               onTap: widget.showViewPoints,
+              onLongPress: () {
+                Feedback.forLongPress(context);
+                videoDetailController.showVP.value = !show;
+              },
+              onSecondaryTap: PlatformUtils.isMobile
+                  ? null
+                  : () => videoDetailController.showVP.value = !show,
             );
           }
           return const SizedBox.shrink();
@@ -1070,7 +1160,8 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
   @override
   void didUpdateWidget(covariant PLVideoPlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (Platform.isAndroid && AndroidHelper.isPipMode) {
+    if (Platform.isAndroid && AndroidHelper.isPipMode ||
+        OS.isHarmony && plPlayerController.isPipMode) {
       plPlayerController.controls = false;
     }
   }
@@ -1119,6 +1210,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
 
   void _onHorizontalDragEnd() {
     if (plPlayerController.seekToPos case final seekToPos?) {
+      feedBack();
       plPlayerController
         ..position.value = seekToPos.inSeconds
         ..seekTo(seekToPos, isSeek: false)
@@ -1388,21 +1480,17 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
     return true;
   }
 
+  /// 鼠标中键/右键全屏切换的挂起项：(进入全屏, 应用内全屏)。
+  /// 在鼠标按下时启动原生全屏过渡会与本次点击重叠，窗口可能卡在半过渡状态
+  /// 导致鼠标事件失效，因此延后到抬起后执行。
+  (bool, bool)? _pendingFullScreenToggle;
+
   void _onPointerDown(PointerDownEvent event) {
     if (PlatformUtils.isDesktop) {
       final buttons = event.buttons;
       final isSecondaryBtn = buttons == kSecondaryMouseButton;
       if (isSecondaryBtn || buttons == kMiddleMouseButton) {
-        final isFullScreen = this.isFullScreen;
-        if (isFullScreen && plPlayerController.controlsLock.value) {
-          plPlayerController
-            ..controlsLock.value = false
-            ..showControls.value = false;
-        }
-        plPlayerController.triggerFullScreen(
-          status: !isFullScreen,
-          inAppFullScreen: isSecondaryBtn,
-        );
+        _pendingFullScreenToggle = (!isFullScreen, isSecondaryBtn);
         return;
       }
     }
@@ -1429,6 +1517,27 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
       }
       _scaleGestureRecognizer.addPointer(event);
     }
+  }
+
+  void _onPointerUp(PointerUpEvent event) {
+    final pending = _pendingFullScreenToggle;
+    if (pending == null || event.buttons != 0) {
+      return;
+    }
+    _pendingFullScreenToggle = null;
+    if (isFullScreen && plPlayerController.controlsLock.value) {
+      plPlayerController
+        ..controlsLock.value = false
+        ..showControls.value = false;
+    }
+    plPlayerController.triggerFullScreen(
+      status: pending.$1,
+      inAppFullScreen: pending.$2,
+    );
+  }
+
+  void _onPointerCancel(PointerCancelEvent event) {
+    _pendingFullScreenToggle = null;
   }
 
   void _onPointerPanZoomUpdate(PointerPanZoomUpdateEvent event) {
@@ -1546,9 +1655,9 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
           size: 20,
           color: Colors.white,
         ),
-        onLongPress: (Platform.isAndroid || kDebugMode) &&
+        onLongPress: (Platform.isAndroid || OS.isHarmony || kDebugMode) &&
                 !plPlayerController.isLive
-            ? screenshotWebp
+            ? _screenshotWebp
             : null,
         onTap: plPlayerController.takeScreenshot,
       ),
@@ -1557,6 +1666,12 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
 
   @override
   Widget build(BuildContext context) {
+    final controller = videoController;
+    if (controller == null) {
+      // 播放器已被释放（换源、退后台清内存）或尚未就绪。父级守卫正常情况下
+      // 不会在此时挂载本页，但重建与挂载之间仍可能被释放，这里退化为空占位。
+      return const SizedBox.shrink();
+    }
     maxWidth = widget.maxWidth;
     maxHeight = widget.maxHeight;
     final isFullScreen = this.isFullScreen;
@@ -1581,19 +1696,62 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
         _videoWidget,
 
         if (widget.danmuWidget case final danmaku?)
-          Positioned.fill(top: 4, child: danmaku),
+          Positioned.fill(
+            top: 4,
+            child: TopInsetPadding(
+              inset: portraitFullscreenTopInset(
+                isFullScreen: isFullScreen,
+                isPortrait: maxHeight >= maxWidth,
+                removeSafeArea: plPlayerController.removeSafeArea,
+                topInset: widget.topInset,
+              ),
+              child: danmaku,
+            ),
+          ),
 
         if (!isLive && !widget.isInAppPip)
+          // 鸿蒙 media_kit fork 的 SubtitleView 没有上游 fork 的
+          // enableDragSubtitle/onUpdatePadding 参数，这里在 Dart 侧自行实现拖动。
           Positioned.fill(
+            top: null, // 不设置 top，避免字幕区域铺满并遮挡视频顶部触控
             child: IgnorePointer(
               ignoring: !plPlayerController.enableDragSubtitle,
-              child: Obx(
-                () => SubtitleView(
-                  controller: videoController,
-                  configuration: plPlayerController.subtitleConfig.value,
-                  enableDragSubtitle: plPlayerController.enableDragSubtitle,
-                  onUpdatePadding: plPlayerController.onUpdatePadding,
-                ),
+              child: GestureDetector(
+                onVerticalDragUpdate: (details) {
+                  final curPadding =
+                      plPlayerController.subtitleConfig.value.padding;
+                  plPlayerController
+                    ..onUpdatePadding(
+                      curPadding.copyWith(
+                        bottom: curPadding.bottom - details.delta.dy,
+                      ),
+                    )
+                    ..updateSubtitleStyle();
+                },
+                child: Obx(() {
+                  final config = plPlayerController.subtitleConfig.value;
+                  final padding = config.padding;
+                  return Padding(
+                    padding: padding.copyWith(
+                      // 防止太往上拖不回来
+                      bottom: padding.bottom.clamp(
+                        0,
+                        0.8 * MediaQuery.sizeOf(context).height,
+                      ),
+                    ),
+                    child: SubtitleView(
+                      controller: controller,
+                      configuration: SubtitleViewConfiguration(
+                        // 去掉 SubtitleView 内部 padding，外部手动管理
+                        padding: EdgeInsets.zero,
+                        visible: config.visible,
+                        style: config.style,
+                        textAlign: config.textAlign,
+                        textScaler: config.textScaler,
+                      ),
+                    ),
+                  );
+                }),
               ),
             ),
           ),
@@ -1800,7 +1958,9 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
             alignment: Alignment.center,
             child: Obx(
               () {
-                final volume = plPlayerController.volume.value;
+                final volume = Pref.showActualVolume
+                    ? plPlayerController.actualVolume.value
+                    : plPlayerController.volume.value;
                 return AnimatedOpacity(
                   curve: Curves.easeInOut,
                   opacity: plPlayerController.volumeIndicator.value ? 1.0 : 0.0,
@@ -1906,6 +2066,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
                     controller: _animationController,
                     isFullScreen: isFullScreen,
                     removeSafeArea: plPlayerController.removeSafeArea,
+                    topInset: widget.topInset,
                     child: plPlayerController.isDesktopPip
                         ? GestureDetector(
                             behavior: HitTestBehavior.translucent,
@@ -2087,6 +2248,12 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
                           padding: const EdgeInsets.only(bottom: 4.25),
                           child: ViewPointSegmentProgressBar(
                             segments: videoDetailController.viewPointList,
+                            fontFamily: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.fontFamily,
+                            fontWeight: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.fontWeight,
                             onSeek: PlatformUtils.isMobile
                                 ? (position) {
                                     if (!plPlayerController
@@ -2391,14 +2558,14 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
     );
   }
 
-  Future<void> screenshotWebp() async {
+  Future<void> _screenshotWebp() async {
     final videoInfo = videoDetailController.data;
     final ids = videoInfo.dash!.video!.availableVideoQualities;
     final video = videoDetailController.findVideoByQa(ids.min);
 
-    VideoQuality qa = video.quality;
     String? url = video.baseUrl;
     if (url == null) return;
+    VideoQuality qa = video.quality;
 
     final ctr = plPlayerController;
     final theme = Theme.of(context);
@@ -2417,7 +2584,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
 
     final success =
         await showDialog<bool>(
-          context: context,
+          context: Get.context!,
           builder: (context) => AlertDialog(
             title: const Text('动态截图'),
             content: Column(
@@ -2493,8 +2660,10 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
     if (!success) return;
 
     final progress = 0.0.obs;
+    // 文件名中小数点改为下划线，避免 saver_gallery ohos 的
+    // path.split('.')[1] 解析扩展名出错（photoType is null）
     final name =
-        '${ctr.cid}-${segment.first.toStringAsFixed(3)}_${segment.second.toStringAsFixed(3)}.webp';
+        '${ctr.cid}-${segment.first.toStringAsFixed(3).replaceAll('.', '_')}_${segment.second.toStringAsFixed(3).replaceAll('.', '_')}.webp';
     final file = '$tmpDirPath/$name';
 
     final mpv = MpvConvertWebp(

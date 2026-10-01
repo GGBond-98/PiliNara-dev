@@ -22,13 +22,13 @@ class LiveCardVSearch extends StatelessWidget {
       cover: item.cover,
     );
     return Card(
+      clipBehavior: Clip.hardEdge,
       child: InkWell(
         onTap: () => PageUtils.toLiveRoom(item.roomid),
         onLongPress: onLongPress,
         onSecondaryTap: PlatformUtils.isMobile ? null : onLongPress,
-        borderRadius: const .all(.circular(12)),
         child: Column(
-          crossAxisAlignment: .start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             AspectRatio(
               aspectRatio: Style.aspectRatio,
@@ -43,13 +43,17 @@ class LiveCardVSearch extends StatelessWidget {
                         src: item.cover!,
                         width: maxWidth,
                         height: maxHeight,
-                        borderRadius: const .vertical(top: .circular(12)),
+                        borderRadius: BorderRadius.zero, // 此处应为非表情类型，且默认不需要圆角
                       ),
                       Positioned(
                         left: 0,
                         right: 0,
                         bottom: 0,
-                        child: videoStat(),
+                        child: AnimatedOpacity(
+                          opacity: 1,
+                          duration: const Duration(milliseconds: 200),
+                          child: videoStat(context),
+                        ),
                       ),
                     ],
                   );
@@ -59,7 +63,7 @@ class LiveCardVSearch extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(5, 8, 5, 4),
               child: Text(
-                item.title.toString(),
+                '${item.title}',
                 textAlign: TextAlign.start,
                 style: const TextStyle(
                   letterSpacing: 0.3,
@@ -74,7 +78,7 @@ class LiveCardVSearch extends StatelessWidget {
     );
   }
 
-  Widget videoStat() {
+  Widget videoStat(BuildContext context) {
     return Container(
       height: 50,
       padding: const EdgeInsets.only(top: 26, left: 10, right: 10),
@@ -93,7 +97,7 @@ class LiveCardVSearch extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            item.name.toString(),
+            '${item.name}',
             style: const TextStyle(fontSize: 11, color: Colors.white),
           ),
           if (item.watchedShow?.textLarge case final textLarge?)

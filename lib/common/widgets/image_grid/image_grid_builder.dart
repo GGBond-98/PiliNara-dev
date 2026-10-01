@@ -24,6 +24,7 @@ import 'package:PiliPlus/common/widgets/image_grid/image_grid_view.dart'
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/gestures.dart'
     show TapGestureRecognizer, LongPressGestureRecognizer;
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart'
     show
         ContainerRenderObjectMixin,
@@ -39,7 +40,6 @@ import 'package:flutter/rendering.dart'
         DiagnosticsDebugCreator,
         RenderObjectVisitor,
         SemanticsConfiguration;
-import 'package:material_ui/material_ui.dart';
 
 /// ref [LayoutBuilder]
 
@@ -96,10 +96,11 @@ class RenderImageGrid extends RenderBox
         RenderBoxContainerDefaultsMixin<RenderBox, MultiChildLayoutParentData>,
         RenderObjectWithLayoutCallbackMixin {
   RenderImageGrid({
-    required this._onTap,
+    required ValueChanged<int> onTap,
     required OnShowMenu? onSecondaryTapUp,
     required OnShowMenu? onLongPressStart,
-  }) : _onSecondaryTapUp = onSecondaryTapUp,
+  }) : _onTap = onTap,
+       _onSecondaryTapUp = onSecondaryTapUp,
        _onLongPressStart = onLongPressStart {
     _tapGestureRecognizer = TapGestureRecognizer()..onTap = _handleOnTap;
     if (onSecondaryTapUp != null) {
@@ -479,7 +480,8 @@ class ImageGridRenderObjectElement extends RenderObjectElement {
     // configuration, or an inherited widget.
     renderObject.scheduleLayoutCallback();
     _needsBuild = true;
-    super.performRebuild(); // Calls widget.updateRenderObject (a no-op in this case).
+    super
+        .performRebuild(); // Calls widget.updateRenderObject (a no-op in this case).
   }
 
   @override
@@ -498,7 +500,7 @@ class ImageGridRenderObjectElement extends RenderObjectElement {
     List<ImageModel> picArr,
     BoxConstraints layoutInfo,
   ) {
-    final maxWidth = math.min(525.0, layoutInfo.maxWidth);
+    final maxWidth = layoutInfo.maxWidth;
     double imageWidth;
     double imageHeight;
     final length = picArr.length;

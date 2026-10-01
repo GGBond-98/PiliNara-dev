@@ -1,9 +1,9 @@
 import 'package:PiliPlus/common/widgets/flutter/list_tile.dart';
-import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
 import 'package:PiliPlus/http/login.dart';
 import 'package:PiliPlus/models/common/setting_type.dart';
 import 'package:PiliPlus/pages/about/view.dart';
+import 'package:PiliPlus/pages/experimental/view.dart';
 import 'package:PiliPlus/pages/login/controller.dart';
 import 'package:PiliPlus/pages/setting/common_setting.dart';
 import 'package:PiliPlus/pages/setting/widgets/multi_select_dialog.dart';
@@ -11,11 +11,12 @@ import 'package:PiliPlus/pages/webdav/view.dart';
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/accounts/account.dart';
 import 'package:PiliPlus/utils/extension/size_ext.dart';
+import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/utils/utils.dart';
+import 'package:material_ui/material_ui.dart' hide ListTile;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
-import 'package:material_ui/material_ui.dart' hide ListTile;
 
 class _SettingsModel {
   final SettingType type;
@@ -79,6 +80,11 @@ class _SettingPageState extends State<SettingPage> {
       icon: Icon(Icons.extension_outlined),
     ),
     _SettingsModel(
+      type: SettingType.experimentalSetting,
+      subtitle: '沉浸光感导航栏、状态栏回顶、接续、后台下载等',
+      icon: Icon(Icons.science_outlined),
+    ),
+    _SettingsModel(
       type: SettingType.webdavSetting,
       icon: Icon(MdiIcons.databaseCogOutline),
     ),
@@ -132,6 +138,9 @@ class _SettingPageState extends State<SettingPage> {
                       .webdavSetting => const WebDavSettingPage(
                         showAppBar: false,
                       ),
+                      .experimentalSetting => const ExperimentalPage(
+                        showAppBar: false,
+                      ),
                       .about => const AboutPage(showAppBar: false),
                     },
                   ),
@@ -159,6 +168,7 @@ class _SettingPageState extends State<SettingPage> {
           .styleSetting ||
           .extraSetting => CommonSetting(settingType: type),
           .webdavSetting => const WebDavSettingPage(),
+          .experimentalSetting => const ExperimentalPage(),
           .about => const AboutPage(),
         },
       );

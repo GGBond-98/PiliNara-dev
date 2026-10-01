@@ -1,5 +1,5 @@
-import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:get/get.dart';
 
 class MultiSelectDialog<T> extends StatefulWidget {
   final Iterable<T> initValues;
@@ -34,7 +34,7 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
       title: Text(widget.title),
       contentPadding: const EdgeInsets.only(top: 12),
       content: Material(
-        type: .transparency,
+        type: MaterialType.transparency,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -45,6 +45,7 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                   return CheckboxListTile(
                     dense: true,
                     value: isChecked,
+                    controlAffinity: ListTileControlAffinity.leading,
                     title: Text(
                       i.value,
                       style: theme.textTheme.titleMedium!,

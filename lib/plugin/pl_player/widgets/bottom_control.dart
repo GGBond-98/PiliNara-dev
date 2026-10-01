@@ -6,8 +6,8 @@ import 'package:PiliPlus/plugin/pl_player/view/view.dart';
 import 'package:PiliPlus/utils/extension/theme_ext.dart';
 import 'package:PiliPlus/utils/feed_back.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
-import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:get/get.dart';
 
 class BottomControl extends StatelessWidget {
   const BottomControl({
@@ -60,7 +60,7 @@ class BottomControl extends StatelessWidget {
     final bufferedBarColor = primary.withValues(alpha: 0.4);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
+      padding: const .symmetric(horizontal: 10, vertical: 12),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -146,6 +146,12 @@ class BottomControl extends StatelessWidget {
                           bottom: desktopProgressBarTopInset,
                           child: ViewPointSegmentProgressBar(
                             segments: videoDetailController.viewPointList,
+                            fontFamily: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.fontFamily,
+                            fontWeight: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.fontWeight,
                             onSeek: (position) =>
                                 controller.seekTo(position, isSeek: false),
                           ),
@@ -155,6 +161,12 @@ class BottomControl extends StatelessWidget {
                           padding: const EdgeInsets.only(bottom: 8.75),
                           child: ViewPointSegmentProgressBar(
                             segments: videoDetailController.viewPointList,
+                            fontFamily: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.fontFamily,
+                            fontWeight: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.fontWeight,
                             onSeek: null,
                           ),
                         ),

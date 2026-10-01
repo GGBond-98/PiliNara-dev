@@ -1,13 +1,14 @@
 import 'package:PiliPlus/common/skeleton/video_card_v.dart';
 import 'package:PiliPlus/common/sliver_single_child_delegate.dart';
+import 'package:PiliPlus/common/widgets/native_top_spacer.dart';
 import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/button/icon_button.dart';
 import 'package:PiliPlus/common/widgets/button/more_btn.dart';
-import 'package:PiliPlus/common/widgets/flutter/refresh_indicator.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
 import 'package:PiliPlus/common/widgets/pair.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/models/common/image_type.dart';
 import 'package:PiliPlus/models_new/live/live_feed_index/card_data_list_item.dart';
 import 'package:PiliPlus/models_new/live/live_feed_index/card_list.dart';
 import 'package:PiliPlus/pages/live/controller.dart';
@@ -55,13 +56,15 @@ class _LivePageState extends State<LivePage>
       clipBehavior: Clip.hardEdge,
       margin: const EdgeInsets.symmetric(horizontal: Style.safeSpace),
       decoration: const BoxDecoration(borderRadius: Style.mdRadius),
-      child: refreshIndicator(
-        key: HomePreviewScope.of(context) ? null : controller.refreshKey,
+      child: NativeTopRefreshIndicator(
+        refreshKey: HomePreviewScope.of(context) ? null : controller.refreshKey,
         onRefresh: controller.onRefresh,
         child: CustomScrollView(
           controller: controller.scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
+            // 原生顶栏启用时顶部的可滚动留白（内容可滑入顶栏下方重合）
+            const NativeTopSpacer(),
             SliverPadding(
               padding: const EdgeInsets.only(
                 top: Style.cardSpace,
@@ -88,7 +91,7 @@ class _LivePageState extends State<LivePage>
           if (list.isNotEmpty)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const .only(bottom: 8.0),
+                padding: const EdgeInsets.only(bottom: 8.0),
                 child: Row(
                   children: [
                     Expanded(
@@ -269,9 +272,9 @@ class _LivePageState extends State<LivePage>
     return [
       SliverToBoxAdapter(
         child: Padding(
-          padding: const .only(bottom: 8.0),
+          padding: const EdgeInsets.only(bottom: 8.0),
           child: Row(
-            mainAxisAlignment: .spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text.rich(
                 TextSpan(
@@ -335,7 +338,7 @@ class _LivePageState extends State<LivePage>
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          shape: .circle,
+                          shape: BoxShape.circle,
                           color: theme.colorScheme.onInverseSurface,
                         ),
                         child: Icon(
@@ -348,7 +351,7 @@ class _LivePageState extends State<LivePage>
                 }
                 final item = followList[index];
                 return Padding(
-                  padding: const .only(right: 5),
+                  padding: const EdgeInsets.only(right: 5),
                   child: SizedBox(
                     width: 65,
                     child: GestureDetector(
@@ -362,20 +365,20 @@ class _LivePageState extends State<LivePage>
                           ? null
                           : () => Get.toNamed('/member?mid=${item.uid}'),
                       child: Column(
-                        mainAxisSize: .min,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Container(
-                            padding: const .all(2),
+                            padding: const EdgeInsets.all(2),
                             decoration: BoxDecoration(
                               border: Border.all(
                                 width: 1.5,
                                 color: theme.colorScheme.primary,
                                 strokeAlign: BorderSide.strokeAlignInside,
                               ),
-                              shape: .circle,
+                              shape: BoxShape.circle,
                             ),
                             child: NetworkImgLayer(
-                              type: .avatar,
+                              type: ImageType.avatar,
                               width: 45,
                               height: 45,
                               src: item.face,

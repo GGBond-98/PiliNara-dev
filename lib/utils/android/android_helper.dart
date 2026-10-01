@@ -1,13 +1,13 @@
-import 'dart:convert';
-import 'dart:ui';
+/// 鸿蒙分支替身：上游此类通过 `jni` 直调 Android 原生方法（见 [bindings.g.dart]）。
+/// 鸿蒙上不引入 `jni`，且所有调用点均由 `Platform.isAndroid` 守卫，故这里只保留
+/// 与上游一致的 API 形态，实现为空操作。鸿蒙的对应能力由 `harmony_adapt/` 与
+/// `floating` 插件提供。
+library;
 
-import 'package:PiliPlus/utils/android/bindings.g.dart';
-import 'package:PiliPlus/utils/utils.dart';
-import 'package:jni/jni.dart';
+import 'package:PiliPlus/utils/page_utils.dart';
 
 abstract final class PiliAndroidHelper {
-  @pragma('vm:prefer-inline')
-  static void back() => AndroidHelper.back();
+  static void back() {}
 
   static void biliSendCommAntifraud(
     int action,
@@ -22,100 +22,34 @@ abstract final class PiliAndroidHelper {
     String sourceId,
     int uid,
     String cookie,
-  ) {
-    final jCommentText = commentText.toJString();
-    final jSourceId = sourceId.toJString();
-    final jCookie = cookie.toJString();
-    final jPictures = pictures.isEmpty
-        ? null
-        : jsonEncode(pictures).toJString();
+  ) {}
 
-    try {
-      AndroidHelper.biliSendCommAntifraud(
-        action,
-        oid,
-        type,
-        rpId,
-        root,
-        parent,
-        ctime,
-        jCommentText,
-        jPictures,
-        jSourceId,
-        uid,
-        jCookie,
-      );
-    } catch (e) {
-      Utils.reportError(e);
-    } finally {
-      jCommentText.release();
-      jSourceId.release();
-      jCookie.release();
-      jPictures?.release();
-    }
-  }
+  static void openLinkVerifySettings() {}
 
-  @pragma('vm:prefer-inline')
-  static void openLinkVerifySettings() =>
-      AndroidHelper.openLinkVerifySettings();
+  static bool openMusic(String title, String? artist, String? album) => false;
 
-  static bool openMusic(String title, String? artist, String? album) {
-    final jTitle = title.toJString();
-    final jArtist = artist?.toJString();
-    final jAlbum = album?.toJString();
-    try {
-      return AndroidHelper.openMusic(jTitle, jArtist, jAlbum);
-    } finally {
-      jTitle.release();
-      jArtist?.release();
-      jAlbum?.release();
-    }
-  }
-
-  @pragma('vm:prefer-inline')
   static void enterPip(
     int width,
     int height, {
     required bool autoEnter,
     required bool isLive,
     required bool isPlaying,
-  }) => AndroidHelper.enterPip(
-    PlatformDispatcher.instance.engineId!,
-    width,
-    height,
-    autoEnter,
-    isLive,
-    isPlaying,
-  );
+  }) {}
 
-  @pragma('vm:prefer-inline')
-  static void disableAutoEnterPip() =>
-      AndroidHelper.disableAutoEnterPip(PlatformDispatcher.instance.engineId!);
+  static void disableAutoEnterPip() {}
 
-  static (int, int)? maxScreenSize() {
-    final jIArr = AndroidHelper.maxScreenSize();
-    if (jIArr != null) {
-      try {
-        return (jIArr[0], jIArr[1]);
-      } finally {
-        jIArr.release();
-      }
-    }
-    return null;
-  }
+  static (int, int)? maxScreenSize() => null;
 
-  static void createShortcut(String id, String uri, String label, String path) {
-    final jId = id.toJString();
-    final jUri = uri.toJString();
-    final jLabel = label.toJString();
-    final jPath = path.toJString();
-    try {
-      AndroidHelper.createShortcut(jId, jUri, jLabel, jPath);
-    } finally {
-      jId.release();
-      jUri.release();
-      jLabel.release();
-      jPath.release();
-    }
+  static void createShortcut(
+    String id,
+    String uri,
+    String label,
+    String path,
+  ) {}
+
+  /// 上游在 Android 12+ 上按已验证的 App Links 域名直接拉起系统处理；鸿蒙无此机制，
+  /// 统一走 [PageUtils.launchURL]。
+  static void openUrl(String url, {String domain = '*.bilibili.com'}) {
+    PageUtils.launchURL(url);
   }
 }

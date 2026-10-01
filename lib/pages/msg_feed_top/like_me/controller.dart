@@ -27,7 +27,7 @@ class LikeMeController
   @override
   Future<void> queryData([bool isRefresh = true]) {
     if (!isRefresh && isEnd) {
-      return Future.syncValue(null);
+      return Future.value(null);
     }
     return super.queryData(isRefresh);
   }

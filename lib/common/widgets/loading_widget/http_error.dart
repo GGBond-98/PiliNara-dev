@@ -1,7 +1,7 @@
 import 'package:PiliPlus/common/assets.dart';
 import 'package:PiliPlus/common/widgets/selection_text.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class HttpError extends StatelessWidget {
   const HttpError({
@@ -23,18 +23,18 @@ class HttpError extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final child = Column(
-      mainAxisSize: .min,
-      mainAxisAlignment: .center,
-      crossAxisAlignment: .center,
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         const SizedBox(height: 40),
         SvgPicture.asset(Assets.error, height: 200),
         const SizedBox(height: 30),
         Padding(
-          padding: const .symmetric(horizontal: 16, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
           child: SelectionText(
             errMsg ?? '没有数据',
-            textAlign: .center,
+            textAlign: TextAlign.center,
             style: theme.textTheme.titleSmall,
           ),
         ),
@@ -42,7 +42,7 @@ class HttpError extends StatelessWidget {
           FilledButton.tonal(
             onPressed: onReload,
             style: FilledButton.styleFrom(
-              tapTargetSize: .padded,
+              tapTargetSize: MaterialTapTargetSize.padded,
               backgroundColor: theme.colorScheme.primary.withAlpha(20),
             ),
             child: Text(

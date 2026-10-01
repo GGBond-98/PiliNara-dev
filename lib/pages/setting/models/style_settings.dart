@@ -6,9 +6,8 @@ import 'package:PiliPlus/common/widgets/custom_toast.dart';
 import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
 import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/common/widgets/scale_app.dart';
-import 'package:PiliPlus/common/widgets/scroll_physics.dart'
-    show kSpringDescription;
 import 'package:PiliPlus/common/widgets/stateful_builder.dart';
+import 'package:PiliPlus/harmony_adapt/harmony_channel.dart';
 import 'package:PiliPlus/models/common/bar_hide_type.dart';
 import 'package:PiliPlus/models/common/dynamic/dynamic_badge_mode.dart';
 import 'package:PiliPlus/models/common/dynamic/up_panel_position.dart';
@@ -154,7 +153,7 @@ List<SettingsModel> get styleSettings => [
     leading: const Icon(Icons.calendar_view_week_outlined),
     title: '列表宽度（dp）限制',
     getSubtitle: () =>
-        '当前: 主页${Pref.recommendCardWidth.toInt()}dp 其他${Pref.smallCardWidth.toInt()}dp，屏幕宽度:${MediaQuery.widthOf(Get.context!).toPrecision(2)}dp。宽度越小列数越多。',
+        '当前: 主页${Pref.recommendCardWidth.toInt()}dp 其他${Pref.smallCardWidth.toInt()}dp，屏幕宽度:${DoubleExt(MediaQuery.widthOf(Get.context!)).toPrecision(2)}dp。宽度越小列数越多。',
     onTap: _showCardWidthDialog,
   ),
   const SwitchModel(
@@ -258,6 +257,11 @@ List<SettingsModel> get styleSettings => [
     setKey: SettingBoxKey.hideBottomBar,
     defaultVal: PlatformUtils.isMobile,
     needReboot: true,
+    onChanged: (value) {
+      if (!value) {
+        HarmonyChannel.setShellBarsScrollHidden(false);
+      }
+    },
   ),
   NormalModel(
     onTap: (context, setState) => _showQualityDialog(
@@ -343,17 +347,26 @@ List<SettingsModel> get styleSettings => [
     leading: const Icon(Icons.color_lens_outlined),
     title: '应用主题',
     getSubtitle: () => '当前主题：${Pref.dynamicColor ? '动态取色' : '指定颜色'}',
-    getTrailing: (theme) => Pref.dynamicColor
-        ? Icon(Icons.color_lens_rounded, color: theme.colorScheme.primary)
-        : SizedBox.square(
-            dimension: 20,
-            child: ColorPalette(
-              colorScheme: colorThemeTypes[Pref.customColor].color
-                  .asColorSchemeSeed(Pref.schemeVariant, theme.brightness),
-              selected: false,
-              showBgColor: false,
-            ),
+    getTrailing: (theme) {
+      if (Pref.dynamicColor) {
+        return Icon(Icons.color_lens_rounded, color: theme.colorScheme.primary);
+      }
+      final customColor = Pref.customColor;
+      final color =
+          colorThemeTypes.elementAtOrNull(customColor)?.color ??
+          Color(customColor);
+      return SizedBox.square(
+        dimension: 20,
+        child: ColorPalette(
+          colorScheme: color.asColorSchemeSeed(
+            Pref.schemeVariant,
+            theme.brightness,
           ),
+          selected: false,
+          showBgColor: false,
+        ),
+      );
+    },
   ),
   PopupModel(
     leading: const Icon(Icons.home_outlined),
@@ -495,7 +508,7 @@ void _showUiScaleDialog(
               divisions: ((maxUiScale - minUiScale) * 20).toInt(),
               label: textController.text,
               onChanged: (value) => setDialogState(() {
-                uiScale = value.toPrecision(2);
+                uiScale = DoubleExt(value).toPrecision(2);
                 textController.text = uiScale.toStringAsFixed(2);
               }),
             ),
@@ -678,12 +691,7 @@ void _showSpringDialog(BuildContext context, _) {
               final res = springDescription.map(double.parse).toList();
               Get.back();
               GStorage.setting.put(SettingBoxKey.springDescription, res);
-              kSpringDescription = SpringDescription(
-                mass: res[0],
-                stiffness: res[1],
-                damping: res[2],
-              );
-              SmartDialog.showToast('设置成功');
+              SmartDialog.showToast('设置成功，重启生效');
             } catch (e) {
               SmartDialog.showToast(e.toString());
             }
@@ -914,6 +922,7 @@ void _setThemeType(ThemeType value, VoidCallback setState) {
   } catch (_) {}
   GStorage.setting.put(SettingBoxKey.themeMode, value.index);
   Get.changeThemeMode(ThemeUtils.themeMode = value.toThemeMode);
+  ThemeUtils.syncColorModeToNative();
   setState();
 }
 

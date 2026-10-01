@@ -49,6 +49,11 @@ class _UpPanelState extends State<UpPanel> {
       controller: controller.scrollController,
       slivers: [
         SliverToBoxAdapter(
+          child: SizedBox(
+            height: MediaQuery.paddingOf(context).top,
+          )
+        ),
+        SliverToBoxAdapter(
           child: InkWell(
             onTap: () => setState(() {
               controller.showLiveUp = !controller.showLiveUp;
@@ -184,7 +189,7 @@ class _UpPanelState extends State<UpPanel> {
       );
       if (isLive) {
         avatar = Stack(
-          clipBehavior: .none,
+          clipBehavior: Clip.none,
           children: [
             avatar,
             Positioned(
@@ -201,7 +206,7 @@ class _UpPanelState extends State<UpPanel> {
         );
       } else if (item.hasUpdate ?? false) {
         avatar = Stack(
-          clipBehavior: .none,
+          clipBehavior: Clip.none,
           children: [
             avatar,
             Positioned(

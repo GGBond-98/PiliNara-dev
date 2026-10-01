@@ -15,17 +15,18 @@
  * along with PiliPlus.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import 'dart:async';
 import 'dart:io' show File, Platform;
 
 import 'package:PiliPlus/common/widgets/colored_box_transition.dart';
 import 'package:PiliPlus/common/widgets/dialog/simple_dialog_option.dart';
+import 'package:PiliPlus/common/widgets/flutter/page/page_view.dart';
 import 'package:PiliPlus/common/widgets/flutter/popup_menu.dart';
 import 'package:PiliPlus/common/widgets/gesture/image_horizontal_drag_gesture_recognizer.dart';
 import 'package:PiliPlus/common/widgets/image_viewer/image.dart';
 import 'package:PiliPlus/common/widgets/image_viewer/loading_indicator.dart';
 import 'package:PiliPlus/common/widgets/image_viewer/viewer.dart';
-import 'package:PiliPlus/common/widgets/scroll_physics.dart'
-    show tabBarScrollPhysics;
+import 'package:PiliPlus/common/widgets/scroll_physics.dart';
 import 'package:PiliPlus/main.dart' show tmpPadding;
 import 'package:PiliPlus/models/common/image_preview_type.dart';
 import 'package:PiliPlus/plugin/pl_player/utils/fullscreen.dart';
@@ -43,9 +44,10 @@ import 'package:easy_debounce/easy_throttle.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:get/get.dart';
-import 'package:material_ui/material_ui.dart' hide Image;
+import 'package:material_ui/material_ui.dart' hide Image, PageView;
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:os_type/os_type.dart';
 
 ///
 /// created by dom on 2026/02/14
@@ -93,10 +95,6 @@ class _GalleryViewerState extends State<GalleryViewer>
   late final DoubleTapGestureRecognizer _doubleTapGestureRecognizer;
   late final ImageHorizontalDragGestureRecognizer
   _horizontalDragGestureRecognizer;
-  ImageHorizontalDragGestureRecognizer horizontalDragGestureRecognizer() {
-    return _horizontalDragGestureRecognizer;
-  }
-
   late final LongPressGestureRecognizer _longPressGestureRecognizer;
 
   late final AnimationController _animateController;
@@ -114,8 +112,8 @@ class _GalleryViewerState extends State<GalleryViewer>
 
   Future<void> _initPlayer() async {
     assert(_player == null);
-    final player = await Player.create();
-    _videoController = await VideoController.create(player);
+    final player = Player();
+    _videoController = VideoController(player);
     if (!mounted) {
       player.dispose();
       _videoController = null;
@@ -159,7 +157,7 @@ class _GalleryViewerState extends State<GalleryViewer>
       ..onLongPress = _onLongPress
       ..gestureSettings = gestureSettings;
 
-    Future.delayed(const Duration(milliseconds: 300), () {
+    Timer(const Duration(milliseconds: 300), () {
       if (mounted) {
         _tapGestureRecognizer.onTap = _onTap;
       }
@@ -193,7 +191,7 @@ class _GalleryViewerState extends State<GalleryViewer>
       } else {
         _hideSystemBar = false;
       }
-    } else if (Platform.isIOS) {
+    } else if (Platform.isIOS || OS.isHarmony) {
       _hideSystemBar = showSystemBar_;
     } else {
       _hideSystemBar = false;
@@ -209,11 +207,7 @@ class _GalleryViewerState extends State<GalleryViewer>
       _initHideSystemBar();
       if (_hideSystemBar) {
         tmpPadding = padding;
-        hideSystemBar()!.whenComplete(
-          () => WidgetsBinding.instance.addPostFrameCallback(
-            (_) => tmpPadding = null,
-          ),
-        );
+        hideSystemBar();
       }
     }
   }
@@ -305,10 +299,11 @@ class _GalleryViewerState extends State<GalleryViewer>
         }
       }
     }
-    Future.delayed(const Duration(milliseconds: 200), _currIndex.close);
+    Timer(const Duration(milliseconds: 200), _currIndex.close);
     super.dispose();
     if (_hideSystemBar) {
       showSystemBar();
+      WidgetsBinding.instance.addPostFrameCallback((_) => tmpPadding = null);
     }
   }
 
@@ -336,7 +331,7 @@ class _GalleryViewerState extends State<GalleryViewer>
                 alignment: .topLeft,
                 animation: _animateController,
                 onTransform: _onTransform,
-                child: PageView.builder(
+                child: PageView<ImageHorizontalDragGestureRecognizer>.builder(
                   controller: _pageController,
                   onPageChanged: _onPageChanged,
                   physics: const AlwaysScrollableScrollPhysics(
@@ -344,8 +339,8 @@ class _GalleryViewerState extends State<GalleryViewer>
                   ),
                   itemCount: widget.sources.length,
                   itemBuilder: _itemBuilder,
-                  horizontalDragGestureRecognizer:
-                      horizontalDragGestureRecognizer,
+                  horizontalDragGestureRecognizer: () =>
+                      _horizontalDragGestureRecognizer,
                 ),
               );
             },
@@ -514,7 +509,7 @@ class _GalleryViewerState extends State<GalleryViewer>
                       _horizontalDragGestureRecognizer,
                   onChangePage: _onChangePage,
                   child: FittedBox(
-                    child: SimpleVideo(
+                    child: Video(
                       controller: _videoController!,
                       fill: Colors.transparent,
                     ),
@@ -623,8 +618,8 @@ class _GalleryViewerState extends State<GalleryViewer>
       items: [
         CustomPopupMenuItem<void>(
           height: 42,
-          onTap: () => ImageUtils.downloadImg([item.url]),
-          child: const Text('保存图片', style: TextStyle(fontSize: 14)),
+          onTap: () => Utils.copyText(item.url),
+          child: const Text('复制链接', style: TextStyle(fontSize: 14)),
         ),
         CustomPopupMenuItem<void>(
           height: 42,
@@ -633,14 +628,22 @@ class _GalleryViewerState extends State<GalleryViewer>
         ),
         CustomPopupMenuItem<void>(
           height: 42,
-          onTap: () => Utils.copyText(item.url),
-          child: const Text('复制链接', style: TextStyle(fontSize: 14)),
+          onTap: () => ImageUtils.downloadImg([item.url]),
+          child: const Text('保存图片', style: TextStyle(fontSize: 14)),
         ),
         CustomPopupMenuItem<void>(
           height: 42,
           onTap: () => PageUtils.launchURL(item.url),
           child: const Text('网页打开', style: TextStyle(fontSize: 14)),
         ),
+        if (widget.sources.length > 1)
+          CustomPopupMenuItem<void>(
+            height: 42,
+            onTap: () => ImageUtils.downloadImg(
+              widget.sources.map((item) => item.url).toList(),
+            ),
+            child: const Text('保存全部图片', style: TextStyle(fontSize: 14)),
+          ),
         if (item.sourceType == SourceType.livePhoto)
           CustomPopupMenuItem<void>(
             height: 42,

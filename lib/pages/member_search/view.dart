@@ -1,11 +1,12 @@
-import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
-import 'package:PiliPlus/common/widgets/scroll_physics.dart' show tabBarView;
+﻿import 'package:PiliPlus/common/widgets/scroll_physics.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
+import 'package:PiliPlus/models/common/member/search_type.dart';
 import 'package:PiliPlus/pages/member_search/child/view.dart';
 import 'package:PiliPlus/pages/member_search/controller.dart';
 import 'package:PiliPlus/utils/utils.dart';
-import 'package:get/get.dart';
+import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:get/get.dart';
 
 class MemberSearchPage extends StatefulWidget {
   const MemberSearchPage({super.key});
@@ -40,7 +41,7 @@ class _MemberSearchPageState extends State<MemberSearchPage> {
           textAlignVertical: TextAlignVertical.center,
           decoration: InputDecoration(
             hintText: '搜索',
-            visualDensity: .standard,
+            visualDensity: VisualDensity.standard,
             border: InputBorder.none,
             suffixIcon: IconButton(
               tooltip: '清空',
@@ -97,11 +98,11 @@ class _MemberSearchPageState extends State<MemberSearchPage> {
                         children: [
                           MemberSearchChildPage(
                             controller: _controller.arcCtr,
-                            searchType: .archive,
+                            searchType: MemberSearchType.archive,
                           ),
                           MemberSearchChildPage(
                             controller: _controller.dynCtr,
-                            searchType: .dynamic,
+                            searchType: MemberSearchType.dynamic,
                           ),
                         ],
                       ),
