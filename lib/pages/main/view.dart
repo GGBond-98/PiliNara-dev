@@ -654,6 +654,13 @@ class _MainAppState extends PopScopeState<MainApp>
     if (PlatformUtils.isMobile) {
       child = AnnotatedRegion<SystemUiOverlayStyle>(
         value: SystemUiOverlayStyle(
+          // 这里必须把状态栏也写全：本区域的样式会整体替换上一份，缺
+          // statusBarColor 时鸿蒙侧会按未指定处理、回落成默认的不透明
+          // 色，首页顶栏区域跟着发白。沉浸光感顶栏关闭时没有原生顶栏
+          // 盖在上面，这个回落才看得见（其余页面的 AnnotatedRegion 都
+          // 显式带了透明）。
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: theme.brightness.reverse,
           systemNavigationBarColor: Colors.transparent,
           systemNavigationBarIconBrightness: theme.brightness.reverse,
         ),

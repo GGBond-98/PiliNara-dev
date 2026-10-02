@@ -149,7 +149,13 @@ class _HomePageState extends CommonPageState<HomePage>
             return SizedBox(
               height: statusBarHeight + Style.topBarHeight - offset,
               child: Stack(
-                // 移除顶部安全区之后，在同步收起顶栏模式下需要保证顶栏有正确的遮挡关系。
+                // 同步收起顶栏时搜索栏会随 offset 上移进入状态栏区域，需要把
+                // 状态栏以下的部分挡住。挡法是裁剪而不是盖一层不透明色块：
+                // Scaffold 的背景是透明的，页面真正的底色（Nara 渐变，或
+                // 关闭渐变时的 colorScheme.surface）在 Scaffold 后面，盖
+                // colorScheme.surface 的色块会把它顶掉——浅色模式下顶部就是
+                // 一条死白。裁剪后状态栏区域透出页面背景，与沉浸光感顶栏
+                // 开启时的观感一致。
                 children: [
                   Positioned(
                     // 必须同时指定 left/right：只指定 top 时 Stack 会给子组件
@@ -161,18 +167,20 @@ class _HomePageState extends CommonPageState<HomePage>
                     top: statusBarHeight,
                     left: 0,
                     right: 0,
-                    child: CustomHeightWidget(
-                      offset: Offset(0, -offset),
-                      height: Style.topBarHeight - offset,
-                      child: Padding(
-                        padding: padding,
-                        child: child,
+                    // ClipRect 的裁剪区恒等于子组件自身尺寸，而
+                    // CustomHeightWidget 是把子树画在负 offset 上的（自身
+                    // 尺寸不变），所以状态栏那截会被正好切掉，效果与原遮罩
+                    // 等价；命中测试同样被裁到状态栏以下。
+                    child: ClipRect(
+                      child: CustomHeightWidget(
+                        offset: Offset(0, -offset),
+                        height: Style.topBarHeight - offset,
+                        child: Padding(
+                          padding: padding,
+                          child: child,
+                        ),
                       ),
                     ),
-                  ),
-                  Container(
-                    height: statusBarHeight,
-                    color: theme.colorScheme.surface,
                   ),
                 ],
               ),
