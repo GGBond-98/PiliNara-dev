@@ -89,8 +89,8 @@
 | 鸿蒙包名 `bundleName` | **改为 `com.dev4harmony.pilinara`**（唯一例外） |
 | 纯鸿蒙胶水：`OS.isHarmony` 分支、`HarmonyChannel.*`、挖孔/安全区、装饰栏、跨设备接续、ohos 插件调用点、MediaQuery/手势修正 | **THEIRS** |
 | `ohos/` DevEco 工程、`packages/{material_ui,cupertino_ui}`、`lib/harmony_adapt/`、`lib/media_kit_adapt/` | **THEIRS**（直接采用） |
-| 鸿蒙 CI（`pr_check.yml`、`release.yml`） | **THEIRS**，但把 `PiliPlus` 字样改成 `PiliNara` |
-| Nara 的 CI（android/ios/linux/mac/win/debug/release_arm64） | **保留 OURS**（Nara 仍然发布这些平台） |
+| 鸿蒙 CI（`pr_check.yml`、`release.yml`） | **THEIRS**，但把 `PiliPlus` 字样改成 `PiliNara`；`.github/workflows/` 只保留这两个（发 PR → `pr_check.yml` 自动检查，打 tag → `release.yml` 自动发 release），合并时若上游带回其他 workflow 一律**删除** |
+| Nara 的 CI（android/ios/linux/mac/win/debug/release_arm64） | **删除**（本仓库只发布鸿蒙侧，这些平台 workflow 已于本轮移除，不得再合回来） |
 | 双方各改一处不同关注点 | **两边都要**（例如 `_builder`：既保留 Nara 的 HyperOS padding 修复，也保留 ohos 的 `ListenableBuilder`） |
 | Nara 独有功能 vs ohos 的删除 | **保留 Nara**（例：`lib/scripts/patch.ps1`、`tool/jnigen.dart`） |
 
