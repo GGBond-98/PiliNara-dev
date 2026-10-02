@@ -29,7 +29,6 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart'
     hide SliverGridDelegateWithMaxCrossAxisExtent;
-import 'package:os_type/os_type.dart';
 
 enum _DownloadTab {
   videos('全部视频'),
@@ -473,7 +472,7 @@ class _DownloadPageState extends State<DownloadPage>
                           : _addSelectedToFolders,
                       child: const Text('添加到'),
                     ),
-                    if (Platform.isAndroid || OS.isHarmony)
+                    if (Platform.isAndroid)
                       TextButton(
                         style: TextButton.styleFrom(
                           visualDensity: VisualDensity.compact,
@@ -484,7 +483,7 @@ class _DownloadPageState extends State<DownloadPage>
                         child: const Text('导出'),
                       ),
                   ]
-                : Platform.isAndroid || OS.isHarmony
+                : Platform.isAndroid
                 ? [
                     TextButton(
                       style: TextButton.styleFrom(
