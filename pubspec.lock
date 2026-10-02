@@ -1272,9 +1272,9 @@ packages:
     dependency: "direct main"
     description:
       path: media_kit
-      ref: feat-ohos
-      resolved-ref: "762fdc6368fb95ad61ab2d99a9cf70a59a00c2e3"
-      url: "https://github.com/cnoim/media-kit.git"
+      ref: feat-secondary-subtitle
+      resolved-ref: d1a8fb9010c0205e2d9cb1ece538471b1bc4426a
+      url: "https://github.com/HelloZeroNick/media-kit.git"
     source: git
     version: "1.2.3"
   media_kit_libs_android_video:
@@ -1290,45 +1290,45 @@ packages:
     dependency: "direct overridden"
     description:
       path: "libs/ios/media_kit_libs_ios_video"
-      ref: feat-ohos
-      resolved-ref: "762fdc6368fb95ad61ab2d99a9cf70a59a00c2e3"
-      url: "https://github.com/cnoim/media-kit.git"
+      ref: feat-secondary-subtitle
+      resolved-ref: d1a8fb9010c0205e2d9cb1ece538471b1bc4426a
+      url: "https://github.com/HelloZeroNick/media-kit.git"
     source: git
     version: "1.1.4"
   media_kit_libs_linux:
     dependency: "direct overridden"
     description:
       path: "libs/linux/media_kit_libs_linux"
-      ref: feat-ohos
-      resolved-ref: "762fdc6368fb95ad61ab2d99a9cf70a59a00c2e3"
-      url: "https://github.com/cnoim/media-kit.git"
+      ref: feat-secondary-subtitle
+      resolved-ref: d1a8fb9010c0205e2d9cb1ece538471b1bc4426a
+      url: "https://github.com/HelloZeroNick/media-kit.git"
     source: git
     version: "1.2.1"
   media_kit_libs_macos_video:
     dependency: "direct overridden"
     description:
       path: "libs/macos/media_kit_libs_macos_video"
-      ref: feat-ohos
-      resolved-ref: "762fdc6368fb95ad61ab2d99a9cf70a59a00c2e3"
-      url: "https://github.com/cnoim/media-kit.git"
+      ref: feat-secondary-subtitle
+      resolved-ref: d1a8fb9010c0205e2d9cb1ece538471b1bc4426a
+      url: "https://github.com/HelloZeroNick/media-kit.git"
     source: git
     version: "1.1.4"
   media_kit_libs_ohos:
     dependency: "direct overridden"
     description:
       path: "libs/ohos/media_kit_libs_ohos"
-      ref: feat-ohos
-      resolved-ref: "762fdc6368fb95ad61ab2d99a9cf70a59a00c2e3"
-      url: "https://github.com/cnoim/media-kit.git"
+      ref: feat-secondary-subtitle
+      resolved-ref: d1a8fb9010c0205e2d9cb1ece538471b1bc4426a
+      url: "https://github.com/HelloZeroNick/media-kit.git"
     source: git
     version: "1.0.0"
   media_kit_libs_video:
     dependency: "direct main"
     description:
       path: "libs/universal/media_kit_libs_video"
-      ref: feat-ohos
-      resolved-ref: "762fdc6368fb95ad61ab2d99a9cf70a59a00c2e3"
-      url: "https://github.com/cnoim/media-kit.git"
+      ref: feat-secondary-subtitle
+      resolved-ref: d1a8fb9010c0205e2d9cb1ece538471b1bc4426a
+      url: "https://github.com/HelloZeroNick/media-kit.git"
     source: git
     version: "1.0.7"
   media_kit_libs_windows_video:
@@ -1353,9 +1353,9 @@ packages:
     dependency: "direct main"
     description:
       path: media_kit_video
-      ref: feat-ohos
-      resolved-ref: "762fdc6368fb95ad61ab2d99a9cf70a59a00c2e3"
-      url: "https://github.com/cnoim/media-kit.git"
+      ref: feat-secondary-subtitle
+      resolved-ref: d1a8fb9010c0205e2d9cb1ece538471b1bc4426a
+      url: "https://github.com/HelloZeroNick/media-kit.git"
     source: git
     version: "2.0.1"
   menu_base:

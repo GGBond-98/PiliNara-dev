@@ -217,21 +217,25 @@ lib/utils/image_memory_cleaner.dart
 
 > 约定：代码里留 `TODO-JNI` / `TODO-OHOS` 注释，本节登记。**禁止静默删除 Nara 功能**。
 
-### 6.1 media_kit：Nara 的 `native` fork 被替换
+### 6.1 media_kit：Nara 的 `native` fork 被替换（现指向 HelloZeroNick 私有 fork）
 
-- 现状：`dependency_overrides` 里 media_kit 全系列指向 `cnoim/media-kit` `feat-ohos`
-  （resolved `762fdc6368fb95ad61ab2d99a9cf70a59a00c2e3`，media_kit **1.2.3**）。
+- 现状：`dependency_overrides` 里 media_kit 全系列指向 `HelloZeroNick/media-kit` `feat-secondary-subtitle`
+  （fork 自 `cnoim/media-kit` `feat-ohos` @ `762fdc6368fb95ad61ab2d99a9cf70a59a00c2e3`
+  + 副字幕提交 `d1a8fb90`，media_kit **1.2.3**）。
   Nara 原本用 `Starfallan/media-kit` `native`
   （resolved `83dc986255a260932ccf3cfa865da31956050eb2`，media_kit **1.1.11**）。
-- 影响：**Nara 在 `native` 分支上的改进不再生效**，两版 API 有实质差异。
-- ⚠️ 下表 6 处已按 cnoim 语义改写 —— **再次合并时不要“还原”成 Nara 写法**（会重新编译失败）：
+- 影响：**Nara 在 `native` 分支上的改进不再生效**，两版 API 有实质差异；
+  副字幕（`setSecondarySubtitleTrack` + `SubtitleViewConfiguration` 4 参数）已按
+  Starfallan/native 在本 fork 补齐（提交 `d1a8fb90`）。
+- ⚠️ 下表 4 处仍按 cnoim 语义改写 —— **再次合并时不要“还原”成 Nara 写法**（会重新编译失败）；
+  标 ✅ 的 2 处已在本 fork 补齐并恢复 Nara 原实现：
 
-| Nara fork 能力 | cnoim 1.2.3 | 已采用的写法 |
+| Nara fork 能力 | cnoim 1.2.3 / 本 fork | 已采用的写法 |
 | --- | --- | --- |
 | `Player.setProperty(k, v)`（同步 `void`） | 只在 `NativePlayer` 上有 `Future<void> setProperty(...)`（`media_kit/lib/src/player/native/player/real.dart`） | `lib/media_kit_adapt/media_kit_adapt.dart` 末尾新增 `extension PlayerExtension on Player`，转发给 `platform?.maybeAsNativePlayer`；两个调用方（`lib/plugin/pl_player/controller.dart`、`lib/pages/video/widgets/header_control.dart`）本就 import 该文件 |
 | `Player.current`（`Playlist` 别名） | 无此 getter | `player.state.playlist.medias`（`PlayerState.playlist` → `Playlist.medias`）×3，均在 `lib/plugin/pl_player/controller.dart` |
-| `Player.setSecondarySubtitleTrack(...)` | 无；`PlatformPlayer` 基类里是 `UnimplementedError`，但 analyzer **不报错**（只在运行时抛） | **跳过 + TODO**：`lib/pages/video/controller.dart` 的 `setSecondarySubtitle` 里调用与索引更新整块注释，`vttSecondarySubtitlesIndex` 恒为 0 |
-| `SubtitleViewConfiguration` 的 `strokeStyle` / `secondaryStyle` / `secondaryStrokeStyle` / `spacing` | 只支持 `visible` / `style` / `textAlign` / `textScaler` / `padding` | `lib/plugin/pl_player/controller.dart` 的 `getSubConfig` 裁掉 4 个参数，原实现整块留注释（副字幕样式随 §6.1 的副字幕跳过一起降级） |
+| `Player.setSecondarySubtitleTrack(...)` ✅ | 本 fork `d1a8fb90` 已实现：`sub-add` 用 `auto` 标志（不动主字幕选择）、等 track-list 新条目（5s 超时回退扫描 `state.tracks`）后写 `secondary-sid`；track-list 处理解析 `selected` / `main-selection`（0=sid, 1=secondary-sid）推导 `state.track.secondarySubtitle` | 已恢复：`lib/pages/video/controller.dart` `setSecondarySubtitle` + `_setSecondarySubtitleTrack`（disposed 守卫 + try/catch，镜像 `_setSubtitleTrack`），`vttSecondarySubtitlesIndex` 随选择更新 |
+| `SubtitleViewConfiguration` 的 `strokeStyle` / `secondaryStyle` / `secondaryStrokeStyle` / `spacing` ✅ | 本 fork `d1a8fb90` 已补齐（`spacing` 默认 4.0；副字幕未显式给 `secondaryStyle` 时回落主 `strokeStyle` 描边） | 已恢复：`lib/plugin/pl_player/controller.dart` `getSubConfig` 回填 4 参数（保留 `textScaler: TextScaler.noScaling`）；`lib/plugin/pl_player/view/view.dart` SubtitleView 构造透传 4 字段（现版本由外部管理拖拽/padding，需逐字段重建 config） |
 | `PlayerStream.size`（`Stream<(int,int)>`）+ 非空 `state.width/height` | 只有 `Stream<int?> width` / `Stream<int?> height`，`state.width/height` 为 `int?` | vendored `lib/media_kit_adapt/simple_video.dart`（见下） |
 | `setShader(type, player)` 双参 | 第 2 参 `NativePlayer? pp` 是冗余的（`setShader` 内部会自己取 player） | 调用点去掉第 2 参：`unawaited(setShader(defaultSuperResolutionType))`（`lib/plugin/pl_player/controller.dart`） |
 
@@ -243,10 +247,12 @@ lib/utils/image_memory_cleaner.dart
   其余语义（宽高未就绪不渲染、`rect.notifyListeners()` 强制重建、尺寸除以 `devicePixelRatio`）
   保持原样。导入点 2 处：`lib/plugin/pl_player/view/view.dart`、`lib/common/widgets/pip_mini_video_content.dart`
   （均插在 `package:PiliPlus/...` 字母序 `common < media_kit_adapt < models` 位置，满足 `always_use_package_imports`）。
-- 若将来改用 cnoim 自带的 `Video`：必须配 `controls: NoVideoControls` 才等价，且
-  `SubtitleViewConfiguration` 无副字幕渲染、`rect` 是否除以 dpr 的尺寸语义需复核。
-- TODO：确认 `Starfallan/media-kit#native` 相对 `cnoim/media-kit#feat-ohos` 的差异，
-  评估能否把 ohos 支持 rebase 回 Nara 的 fork，或至少在非鸿蒙平台条件切换依赖。
+- 若将来改用 fork 自带的 `Video`：必须配 `controls: NoVideoControls` 才等价；
+  `SubtitleViewConfiguration` 已支持副字幕双行渲染（`d1a8fb90`），`rect` 是否除以 dpr 的尺寸语义仍需复核。
+- TODO：`Starfallan/media-kit#native` 的副字幕已移植完成（本 fork `feat-secondary-subtitle`）；
+  仍需评估能否把 ohos 支持 + 副字幕 rebase 回 Nara 的 fork，或在非鸿蒙平台条件切换依赖。
+- 取源：github.com:443 被网络拦截时，`pub get` 需 `GIT_CONFIG_GLOBAL=<repo>\.gitconfig-gh`
+  （内含该 URL 的 `insteadOf` 改写到 `git@github.com:`，经 `ssh.github.com:443` + deploy key 拉取）。
 
 ### 6.2 若干 Nara fork 依赖被 ohos fork 顶掉
 

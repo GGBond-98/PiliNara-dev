@@ -152,13 +152,13 @@ dependencies:
   media_kit: # overridden
   media_kit_video:
     git:
-      url: https://github.com/cnoim/media-kit.git
-      ref: feat-ohos
+      url: https://github.com/HelloZeroNick/media-kit.git
+      ref: feat-secondary-subtitle
       path: ./media_kit_video
   media_kit_libs_video:
     git:
-      url: https://github.com/cnoim/media-kit.git
-      ref: feat-ohos
+      url: https://github.com/HelloZeroNick/media-kit.git
+      ref: feat-secondary-subtitle
       path: ./libs/universal/media_kit_libs_video
 
   # 媒体通知
@@ -364,28 +364,28 @@ dependency_overrides:
   rxdart: ^0.28.0
   media_kit:
     git:
-      url: https://github.com/cnoim/media-kit.git
-      ref: feat-ohos
+      url: https://github.com/HelloZeroNick/media-kit.git
+      ref: feat-secondary-subtitle
       path: ./media_kit
   media_kit_libs_linux:
     git:
-      url: https://github.com/cnoim/media-kit.git
-      ref: feat-ohos
+      url: https://github.com/HelloZeroNick/media-kit.git
+      ref: feat-secondary-subtitle
       path: ./libs/linux/media_kit_libs_linux
   media_kit_libs_ios_video:
     git:
-      url: https://github.com/cnoim/media-kit.git
-      ref: feat-ohos
+      url: https://github.com/HelloZeroNick/media-kit.git
+      ref: feat-secondary-subtitle
       path: ./libs/ios/media_kit_libs_ios_video
   media_kit_libs_macos_video:
     git:
-      url: https://github.com/cnoim/media-kit.git
-      ref: feat-ohos
+      url: https://github.com/HelloZeroNick/media-kit.git
+      ref: feat-secondary-subtitle
       path: ./libs/macos/media_kit_libs_macos_video
   media_kit_libs_ohos:
     git:
-      url: https://github.com/cnoim/media-kit.git
-      ref: feat-ohos
+      url: https://github.com/HelloZeroNick/media-kit.git
+      ref: feat-secondary-subtitle
       path: ./libs/ohos/media_kit_libs_ohos
   # media_kit_libs_android_video:
   #   git:

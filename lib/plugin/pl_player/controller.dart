@@ -593,26 +593,36 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
   SubtitleViewConfiguration get getSubConfig {
     final subTitleStyle = this.subTitleStyle;
+    final secondaryStyle = subTitleSecondaryStyle;
 
-    // TODO(ohos): 鸿蒙侧 cnoim media_kit 的 SubtitleViewConfiguration 暂不支持
-    // strokeStyle / secondaryStyle / secondaryStrokeStyle / spacing，副字幕样式
-    // 待配套 media_kit 升级后恢复。
-    // final secondaryStyle = subTitleSecondaryStyle;
-    // TextStyle? strokeOf(TextStyle base, double bgOpacity, double strokeWidth) =>
-    //     bgOpacity == 0
-    //     ? base.copyWith(
-    //         color: null,
-    //         background: null,
-    //         backgroundColor: null,
-    //         foreground: Paint()
-    //           ..color = Colors.black
-    //           ..style = PaintingStyle.stroke
-    //           ..strokeWidth = strokeWidth,
-    //       )
-    //     : null;
+    // 无背景时用描边保证可读性,主副字幕各自独立
+    TextStyle? strokeOf(TextStyle base, double bgOpacity, double strokeWidth) =>
+        bgOpacity == 0
+        ? base.copyWith(
+            color: null,
+            background: null,
+            backgroundColor: null,
+            foreground: Paint()
+              ..color = Colors.black
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = strokeWidth,
+          )
+        : null;
 
     return SubtitleViewConfiguration(
       style: subTitleStyle,
+      strokeStyle: strokeOf(
+        subTitleStyle,
+        subtitleBgOpacity,
+        subtitleStrokeWidth,
+      ),
+      secondaryStyle: secondaryStyle,
+      secondaryStrokeStyle: strokeOf(
+        secondaryStyle,
+        subtitleSecondaryBgOpacity,
+        subtitleSecondaryStrokeWidth,
+      ),
+      spacing: subtitleSecondarySpacing,
       padding: EdgeInsets.only(
         left: subtitlePaddingH.toDouble(),
         right: subtitlePaddingH.toDouble(),
@@ -3382,7 +3392,14 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       setPlayCallBack(null);
 
       if ((Platform.isAndroid || OS.isHarmony) && _playerCount <= 1) {
-        _disableAutoEnterPip();
+        // 只有真的离开播放才切断系统自动画中画。pauseOnPop 为 false 表示
+        // 本次 pop 是在进应用内小窗或归位到下层视频页，播放并未结束，这
+        // 一刀关掉 auto-start 后没有任何地方补得回来（补开依赖 playing
+        // 事件，而小窗期间播放是连续的）：小窗期间退后台不再转系统画中画，
+        // 且本次视频的后台画中画会一直失效到下一个视频。
+        if (pauseOnPop) {
+          _disableAutoEnterPip();
+        }
         if (!setSystemBrightness) {
           ScreenBrightnessPlatform.instance.resetApplicationScreenBrightness();
         }

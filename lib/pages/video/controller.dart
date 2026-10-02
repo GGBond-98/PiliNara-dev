@@ -1603,26 +1603,26 @@ class VideoDetailController extends GetxController
 
   Future<void> setSecondarySubtitle(int index) async {
     final player = plPlayerController.videoPlayerController;
+    // 换集/退出期间本方法里有多处 await，播放器随时可能已被销毁
+    if (isClosed || plPlayerController.playerDisposed) return;
 
     // index == 主字幕轨为防御性兜底(UI 已置灰该项),与 setSubtitle 的
     // 守卫同规则:冲突时副字幕让位,即视为关闭副字幕。
     if (index <= 0 || index == vttSubtitlesIndex.value) {
       vttSecondarySubtitlesIndex.value = 0;
-      // TODO(ohos): cnoim fork 未实现 setSecondarySubtitleTrack，副字幕跳过
-      // await player?.setSecondarySubtitleTrack(.no());
+      await _setSecondarySubtitleTrack(.no());
       return;
     }
 
     if (player == null) return;
 
-    // TODO(ohos): cnoim fork 未实现 setSecondarySubtitleTrack，副字幕跳过
-    // final subUri = await _resolveVttUri(index - 1);
-    // if (isClosed || subUri == null) return;
-    // final sub = subtitles[index - 1];
-    // await player.setSecondarySubtitleTrack(
-    //   SubtitleTrack(subUri, sub.lanDoc, sub.lan, uri: true),
-    // );
-    // vttSecondarySubtitlesIndex.value = index;
+    final subUri = await _resolveVttUri(index - 1);
+    if (isClosed || subUri == null) return;
+    final sub = subtitles[index - 1];
+    await _setSecondarySubtitleTrack(
+      SubtitleTrack(subUri, sub.lanDoc, sub.lan, uri: true),
+    );
+    vttSecondarySubtitlesIndex.value = index;
   }
 
   /// 取 subtitles[subIdx] 的 VTT 播放地址(本地文件路径或 memory:// 数据),
@@ -1647,6 +1647,17 @@ class VideoDetailController extends GetxController
       await plPlayerController.videoPlayerController?.setSubtitleTrack(track);
     } catch (e) {
       if (kDebugMode) debugPrint('setSubtitleTrack failed: $e');
+    }
+  }
+
+  /// 设置副字幕轨道；播放器可能在 await 之后已被销毁
+  Future<void> _setSecondarySubtitleTrack(SubtitleTrack track) async {
+    if (plPlayerController.playerDisposed) return;
+    try {
+      await plPlayerController.videoPlayerController
+          ?.setSecondarySubtitleTrack(track);
+    } catch (e) {
+      if (kDebugMode) debugPrint('setSecondarySubtitleTrack failed: $e');
     }
   }
 
