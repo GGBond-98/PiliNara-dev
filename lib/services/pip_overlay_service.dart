@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart'
     show PointerEnterEvent, PointerExitEvent, PointerScrollEvent;
 import 'package:material_ui/material_ui.dart';
+import 'package:os_type/os_type.dart';
 import 'package:get/get.dart';
 
 class VideoStackManager {
@@ -105,19 +106,30 @@ class PipOverlayService {
     bool enabled,
   ) {
     // 1. 基础条件判断
-    if (!Platform.isAndroid ||
-        plPlayerController == null ||
+    if (plPlayerController == null ||
         !plPlayerController.autoPiP ||
         !Pref.enableInAppPipToSystemPip) {
       return;
     }
 
-    if (DeviceUtils.sdkInt >= 31) {
-      if (enabled) {
-        plPlayerController.enterPip(autoEnter: true);
-      } else {
-        plPlayerController.disableAutoEnterPip();
-      }
+    // 平台能力：Android 要 API 31+，鸿蒙没有这个门槛。原来是先判
+    // !Platform.isAndroid 直接 return，再判 DeviceUtils.sdkInt >= 31，而
+    // sdkInt 在非 Android 侧恒为 0（AndroidHelper 桩实现返回 0），于是这条
+    // "应用内小窗 ↔ 系统画中画"的桥在鸿蒙上一次都不会走。后果是：
+    // · 进小窗时不重新武装系统 auto-start，小窗期间退后台不转系统画中画；
+    // · 从视频页 pop 进小窗时另一处 _disableAutoEnterPip 已经关掉 auto-start，
+    //   这里本该补开却补不上，本次视频的后台画中画一直失效，直到切进下一个
+    //   视频重放 playing 事件才恢复。
+    final supported =
+        OS.isHarmony || (Platform.isAndroid && DeviceUtils.sdkInt >= 31);
+    if (!supported) {
+      return;
+    }
+
+    if (enabled) {
+      plPlayerController.enterPip(autoEnter: true);
+    } else {
+      plPlayerController.disableAutoEnterPip();
     }
   }
 

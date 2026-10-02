@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart'
     show PointerEnterEvent, PointerExitEvent, PointerScrollEvent;
 import 'package:material_ui/material_ui.dart';
+import 'package:os_type/os_type.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 
@@ -64,19 +65,27 @@ class LivePipOverlayService {
     bool enabled,
   ) {
     // 1. 基础条件判断
-    if (!Platform.isAndroid ||
-        plPlayerController == null ||
+    if (plPlayerController == null ||
         !plPlayerController.autoPiP ||
         !Pref.enableInAppPipToSystemPip) {
       return;
     }
 
-    if (DeviceUtils.sdkInt >= 31) {
-      if (enabled) {
-        plPlayerController.enterPip(autoEnter: true);
-      } else {
-        plPlayerController.disableAutoEnterPip();
-      }
+    // 与 PipOverlayService._setSystemAutoPipEnabled 同因：原来的
+    // !Platform.isAndroid + DeviceUtils.sdkInt >= 31（非 Android 侧 sdkInt
+    // 恒为 0）使本方法在鸿蒙上恒为空操作，进出直播小窗都无法同步系统
+    // auto-start——小窗期间退后台不转画中画，退出后本次直播的后台画中画
+    // 也一直失效到下一个视频。
+    final supported =
+        OS.isHarmony || (Platform.isAndroid && DeviceUtils.sdkInt >= 31);
+    if (!supported) {
+      return;
+    }
+
+    if (enabled) {
+      plPlayerController.enterPip(autoEnter: true);
+    } else {
+      plPlayerController.disableAutoEnterPip();
     }
   }
 
