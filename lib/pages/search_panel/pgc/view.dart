@@ -52,7 +52,7 @@ class _SearchPgcPanelState
   );
 
   @override
-  Widget buildList(ThemeData theme, List<SearchPgcItemModel> list) {
+  Widget buildList(List<SearchPgcItemModel> list) {
     return SliverGrid.builder(
       gridDelegate: gridDelegate,
       itemBuilder: (BuildContext context, int index) {

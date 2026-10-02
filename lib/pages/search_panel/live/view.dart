@@ -54,7 +54,7 @@ class _SearchLivePanelState
   );
 
   @override
-  Widget buildList(ThemeData theme, List<SearchLiveItemModel> list) {
+  Widget buildList(List<SearchLiveItemModel> list) {
     return SliverPadding(
       padding: const .only(left: Style.safeSpace, right: Style.safeSpace),
       sliver: SliverGrid.builder(

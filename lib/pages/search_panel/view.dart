@@ -51,19 +51,18 @@ abstract class CommonSearchPanelState<
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final theme = Theme.of(context);
     return refreshIndicator(
       onRefresh: controller.onRefresh,
       child: CustomScrollView(
         controller: controller.scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          ?buildHeader(theme),
+          ?buildHeader(),
           SliverPadding(
             padding: EdgeInsets.only(
               bottom: MediaQuery.viewPaddingOf(context).bottom + 100,
             ),
-            sliver: Obx(() => _buildBody(theme, controller.loadingState.value)),
+            sliver: Obx(() => _buildBody(controller.loadingState.value)),
           ),
         ],
       ),
@@ -72,7 +71,7 @@ abstract class CommonSearchPanelState<
 
   Widget get buildLoading;
 
-  Widget _buildBody(ThemeData theme, LoadingState<List<T>?> loadingState) {
+  Widget _buildBody(LoadingState<List<T>?> loadingState) {
     return switch (loadingState) {
       Loading() => buildLoading,
       Success(:final response) when response != null && response.isNotEmpty =>
@@ -83,9 +82,9 @@ abstract class CommonSearchPanelState<
           }
           final showLoadMore = controller.hasKeywordFilter &&
               filtered.length <= 5;
-          if (!showLoadMore) return buildList(theme, filtered);
+          if (!showLoadMore) return buildList(filtered);
           return SliverMainAxisGroup(
-            slivers: [buildList(theme, filtered), _buildInlineLoadMore()],
+            slivers: [buildList(filtered), _buildInlineLoadMore()],
           );
         }(),
       Success() => HttpError(onReload: controller.onReload),
@@ -168,7 +167,7 @@ abstract class CommonSearchPanelState<
     );
   }
 
-  Widget? buildHeader(ThemeData theme) => null;
+  Widget? buildHeader() => null;
 
   Widget _buildInlineLoadMore() {
     return SliverToBoxAdapter(
@@ -194,5 +193,5 @@ abstract class CommonSearchPanelState<
 
   String? getTitle(T item) => null;
 
-  Widget buildList(ThemeData theme, List<T> list);
+  Widget buildList(List<T> list);
 }
