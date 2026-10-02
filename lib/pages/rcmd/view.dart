@@ -5,8 +5,8 @@ import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
 import 'package:PiliPlus/common/widgets/native_top_spacer.dart';
 import 'package:PiliPlus/common/widgets/video_card/video_card_v.dart';
 import 'package:PiliPlus/http/loading_state.dart';
-import 'package:PiliPlus/pages/rcmd/controller.dart';
 import 'package:PiliPlus/pages/home/home_preview_scope.dart';
+import 'package:PiliPlus/pages/rcmd/controller.dart';
 import 'package:PiliPlus/utils/grid.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter/scheduler.dart';
@@ -74,7 +74,7 @@ class _RcmdPageState extends State<RcmdPage>
     super.build(context);
     final colorScheme = ColorScheme.of(context);
     return Container(
-      clipBehavior: Clip.hardEdge,
+      clipBehavior: Clip.none,
       margin: const EdgeInsets.symmetric(horizontal: Style.safeSpace),
       decoration: const BoxDecoration(borderRadius: Style.mdRadius),
       child: NativeTopRefreshIndicator(
