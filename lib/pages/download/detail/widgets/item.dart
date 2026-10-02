@@ -29,6 +29,7 @@ import 'package:PiliPlus/utils/storage.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:os_type/os_type.dart';
 import 'package:path/path.dart' as path;
 
 class DetailItem extends StatelessWidget {
@@ -566,7 +567,7 @@ class DetailItem extends StatelessWidget {
                     ),
                     onTap: () => Get.toNamed('/member?mid=$mid'),
                   ),
-                if (canDel && Platform.isAndroid)
+                if (canDel && (Platform.isAndroid || OS.isHarmony))
                   CustomPopupMenuItem<void>(
                     height: 38,
                     child: const Text('导出', style: TextStyle(fontSize: 13)),

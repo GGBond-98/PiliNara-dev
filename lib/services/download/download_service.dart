@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert' show jsonDecode, jsonEncode;
 import 'dart:io' show Directory, File;
 
+import 'package:PiliPlus/common/constants.dart';
 import 'package:PiliPlus/grpc/dm.dart';
 import 'package:PiliPlus/harmony_adapt/harmony_channel.dart';
 import 'package:PiliPlus/http/download.dart';
@@ -32,6 +33,7 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:os_type/os_type.dart';
 import 'package:path/path.dart' as path;
+import 'package:saver_gallery/saver_gallery.dart';
 import 'package:synchronized/synchronized.dart';
 
 // ref https://github.com/10miaomiao/bilimiao2/blob/master/bilimiao-download/src/main/java/cn/a10miaomiao/bilimiao/download/DownloadService.kt
@@ -830,12 +832,64 @@ class DownloadService extends GetxService {
   static String get _exportBasePath =>
       path.join('/storage/emulated/0/Download', 'PiliNara');
 
+  /// 鸿蒙：把缓存条目的视频保存到系统相册（媒体库）。
+  /// 上游逻辑是整目录复制到 /storage/emulated/0/Download/PiliNara——该共享
+  /// 路径在鸿蒙上不可写，改为用 saver_gallery 直接入库；封面/弹幕/元数据等
+  /// 副作用文件不进相册，DASH 分离音轨（audio.m4s）暂不导出。
+  static Future<String> _exportEntryToAlbum(
+    BiliDownloadEntryInfo entry,
+    ValueChanged<double>? onProgress,
+  ) async {
+    final videoDir = Directory(path.join(entry.entryDirPath, entry.typeTag));
+    final candidates = <(File, String)>[];
+    final type1 = File(path.join(videoDir.path, PathUtils.videoNameType1));
+    if (type1.existsSync()) {
+      candidates.add((type1, _albumVideoName(entry.title)));
+    }
+    // DASH 视频流是 .m4s，saver_gallery ohos 按 path.split('.')[1] 解析
+    // 扩展名会得到 photoType null，按 mp4 入库
+    final type2 = File(path.join(videoDir.path, PathUtils.videoNameType2));
+    if (type2.existsSync()) {
+      candidates.add((type2, _albumVideoName(entry.title, '_video.mp4')));
+    }
+    if (candidates.isEmpty) throw '没有可导出的视频';
+
+    final totalSize = candidates.fold<int>(0, (s, c) => s + c.$1.lengthSync());
+    int saved = 0;
+    for (final (file, fileName) in candidates) {
+      final res = await SaverGallery.saveFile(
+        filePath: file.path,
+        fileName: fileName,
+        androidRelativePath: Constants.appName,
+        skipIfExists: false,
+      );
+      if (!res.isSuccess) throw '保存失败: ${res.errorMessage}';
+      saved += file.lengthSync();
+      if (totalSize > 0) onProgress?.call(saved / totalSize);
+    }
+    return '相册';
+  }
+
+  /// 生成入库文件名：标题中的点会让 saver_gallery ohos 的
+  /// `path.split('.')[1]` 解析错扩展名，路径分隔符一并替换
+  static String _albumVideoName(String title, [String suffix = '.mp4']) {
+    var safe = title
+        .replaceAll('.', '_')
+        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+        .trim();
+    if (safe.isEmpty) safe = 'PiliNara';
+    return safe.endsWith(suffix) ? safe : '$safe$suffix';
+  }
+
   static Future<String> exportEntry(
     BiliDownloadEntryInfo entry,
     ValueChanged<double>? onProgress,
   ) async {
     final srcDir = Directory(entry.entryDirPath);
     if (!srcDir.existsSync()) throw '缓存目录不存在';
+    if (OS.isHarmony) {
+      return _exportEntryToAlbum(entry, onProgress);
+    }
 
     final baseDir = Directory(_exportBasePath);
     if (!baseDir.existsSync()) await baseDir.create(recursive: true);

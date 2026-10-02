@@ -19,6 +19,7 @@ import 'package:material_ui/material_ui.dart'
     hide SliverGridDelegateWithMaxCrossAxisExtent;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
+import 'package:os_type/os_type.dart';
 
 enum _FolderSortAction {
   manual,
@@ -190,7 +191,7 @@ class _DownloadFolderPageState extends State<DownloadFolderPage> {
                     _controller.checkedCount == 0 ? null : _addSelectedToFolder,
                 child: const Text('添加到'),
               ),
-              if (Platform.isAndroid)
+              if (Platform.isAndroid || OS.isHarmony)
                 TextButton(
                   style: TextButton.styleFrom(
                     visualDensity: VisualDensity.compact,
