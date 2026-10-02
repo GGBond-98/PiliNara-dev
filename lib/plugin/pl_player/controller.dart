@@ -1522,8 +1522,23 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       // isPipMode 是普通 bool，build 读它不产生依赖；PiP 结束时若窗口尺寸
       // 恰好没变（如画中画期间从应用栏以小窗打开 app），没有任何重建时机，
       // 页面会冻结在画中画布局。用回调驱动 pipModeRx，页面据此重建。
-      Floating().onPipModeChanged = (v) => pipModeRx.value = v;
-      pipModeRx.value = Floating().isPipMode;
+      // 这里同时是鸿蒙版的 onPipChanged 状态同步（Android 走 Utils.channel，
+      // 见构造函数）：系统画中画开始/结束必须同步 isNativePip，否则应用内
+      // 小窗不会切到全屏视频分支，画中画窗口里小窗会和页面 UI 叠加。
+      // 仅在状态真实变化时驱动自动纯音频状态机，避免监听重建时重复触发。
+      void syncNativePip(bool v) {
+        final changed = isNativePip.value != v;
+        pipModeRx.value = v;
+        isNativePip.value = v;
+        PipOverlayService.isNativePip = v;
+        LivePipOverlayService.isNativePip = v;
+        if (changed) {
+          handleAutoAudioOnlyPipChanged(v);
+        }
+      }
+
+      Floating().onPipModeChanged = syncNativePip;
+      syncNativePip(Floating().isPipMode);
     }
     final stream = player.stream;
     _subscriptions = [
