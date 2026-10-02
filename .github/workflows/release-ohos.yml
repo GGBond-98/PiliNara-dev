@@ -13,7 +13,7 @@ jobs:
     permissions: write-all
     steps:
       - name: Clone repository
-        uses: actions/ch  eckout@v4
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
