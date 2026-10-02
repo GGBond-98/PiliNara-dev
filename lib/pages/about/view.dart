@@ -9,6 +9,7 @@ import 'package:PiliPlus/common/widgets/dialog/dialog.dart';
 import 'package:PiliPlus/common/widgets/dialog/export_import.dart';
 import 'package:PiliPlus/common/widgets/dialog/simple_dialog_option.dart';
 import 'package:PiliPlus/common/widgets/flutter/list_tile.dart';
+import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/pages/mine/controller.dart';
 import 'package:PiliPlus/services/logger.dart';
 import 'package:PiliPlus/utils/accounts.dart';
@@ -25,11 +26,10 @@ import 'package:PiliPlus/utils/platform_utils.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/update.dart';
 import 'package:PiliPlus/utils/utils.dart';
-import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
-import 'package:material_ui/material_ui.dart' hide ListTile;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
+import 'package:material_ui/material_ui.dart' hide ListTile;
 import 'package:os_type/os_type.dart';
 
 class AboutPage extends StatefulWidget {
@@ -175,27 +175,27 @@ Commit Hash: ${BuildConfig.commitHash}''',
             color: theme.colorScheme.outlineVariant,
           ),
           ListTile(
+            onTap: () => PageUtils.launchURL(Constants.sourceCodeUrl),
+            leading: const Icon(Icons.code),
+            title: const Text('本应用源码仓库'),
+            subtitle: Text(Constants.sourceCodeUrl, style: subTitleStyle),
+          ),
+          ListTile(
+            onTap: () => PageUtils.launchURL(Constants.pilinaraCodeUrl),
+            leading: const Icon(Icons.code),
+            title: const Text('PiliNara上游源码仓库'),
+            subtitle: Text(Constants.pilinaraCodeUrl, style: subTitleStyle),
+          ),
+          ListTile(
             onTap: () => PageUtils.launchURL(
               'https://github.com/bggRGjQaUbCoE/PiliPlus',
             ),
             leading: const Icon(Icons.code),
-            title: const Text('上游Source Code'),
+            title: const Text('PiliPlus上游源码仓库'),
             subtitle: Text(
               'https://github.com/bggRGjQaUbCoE/PiliPlus',
               style: subTitleStyle,
             ),
-          ),
-          ListTile(
-            onTap: () => PageUtils.launchURL(Constants.sourceCodeUrl),
-            leading: const Icon(Icons.code),
-            title: const Text('Source Code'),
-            subtitle: Text(Constants.sourceCodeUrl, style: subTitleStyle),
-          ),
-          ListTile(
-            onTap: () => PageUtils.launchURL(Constants.upstreamCodeUrl),
-            leading: const Icon(Icons.code),
-            title: const Text('Upstream Code'),
-            subtitle: Text(Constants.upstreamCodeUrl, style: subTitleStyle),
           ),
           if (Platform.isAndroid)
             ListTile(
