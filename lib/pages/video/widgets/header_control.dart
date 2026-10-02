@@ -529,6 +529,24 @@ class HeaderControlState extends State<HeaderControl>
                         )
                       : null,
                 ),
+                // 全屏下也提供入口（点击后先退全屏再收起）；系统 PiP 中没有控制栏，
+                // 排除。非全屏时仍按 canPopPage 收口，不摆出点了只会 toast 的入口
+                if (!plPlayerController.isDesktopPip &&
+                    !plPlayerController.isPipMode &&
+                    (isFullScreen ||
+                        videoDetailCtr.canPopPage(isPortrait: isPortrait)))
+                  ListTile(
+                    dense: true,
+                    onTap: () {
+                      Get.back();
+                      videoDetailCtr.onRequestInAppPip?.call();
+                    },
+                    leading: const Icon(
+                      Icons.picture_in_picture_alt_outlined,
+                      size: 20,
+                    ),
+                    title: const Text('应用内画中画', style: titleStyle),
+                  ),
                 if (!isFileSource) ...[
                   ListTile(
                     dense: true,
@@ -777,7 +795,11 @@ class HeaderControlState extends State<HeaderControl>
                   dense: true,
                   onTap: () {
                     Get.back();
-                    showSetDanmaku();
+                    showSetDanmaku(
+                      maskController: isFileSource
+                          ? null
+                          : videoDetailCtr.danmakuMaskController,
+                    );
                   },
                   leading: const Icon(CustomIcons.dm_settings, size: 20),
                   title: const Text('弹幕设置', style: titleStyle),
@@ -1864,21 +1886,28 @@ class HeaderControlState extends State<HeaderControl>
                 },
               ),
             ),
-            if (introController.isShowOnlineTotal)
+            if (introController.isShowOnlineTotal || introController.isShowDmCount)
               Positioned(
                 left: 0,
                 bottom: 0,
                 child: FractionalTranslation(
                   translation: const Offset(0, 1),
-                  child: Obx(
-                    () => Text(
-                      '${introController.total.value}人正在看',
+                  child: Obx(() {
+                    final parts = <String>[
+                      if (introController.isShowOnlineTotal)
+                        '${introController.total.value}人正在看',
+                      if (introController.isShowDmCount &&
+                          videoDetailCtr.dmCount.value != null)
+                        '${videoDetailCtr.dmCount.value}条弹幕',
+                    ];
+                    return Text(
+                      parts.join('  '),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 11,
                       ),
-                    ),
-                  ),
+                    );
+                  }),
                 ),
               ),
           ],
@@ -2012,25 +2041,25 @@ class HeaderControlState extends State<HeaderControl>
                       ),
                     ),
                   ),
-                Obx(
-                  () => videoDetailCtr.segmentProgressList.isNotEmpty
-                      ? SizedBox(
-                          width: btnWidth,
-                          height: btnHeight,
-                          child: IconButton(
-                            tooltip: '片段信息',
-                            style: btnStyle,
-                            onPressed: videoDetailCtr.showSBDetail,
-                            icon: const Icon(
-                              MdiIcons.advertisements,
-                              size: 19,
-                              color: Colors.white,
-                            ),
-                          ),
-                        )
-                      : const SizedBox.shrink(),
-                ),
               ],
+              Obx(
+                () => videoDetailCtr.segmentProgressList.isNotEmpty
+                    ? SizedBox(
+                        width: btnWidth,
+                        height: btnHeight,
+                        child: IconButton(
+                          tooltip: '片段信息',
+                          style: btnStyle,
+                          onPressed: videoDetailCtr.showSBDetail,
+                          icon: const Icon(
+                            MdiIcons.advertisements,
+                            size: 19,
+                            color: Colors.white,
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
               if (!isPortrait || isFullScreen || PlatformUtils.isDesktop) ...[
                 SizedBox(
                   width: btnWidth,
@@ -2324,14 +2353,14 @@ class HeaderControlState extends State<HeaderControl>
               ],
             ),
           // 计入人数行的高度，收起顶部控制栏时避免溢出内容残留。
-          if (introController.isShowOnlineTotal)
+          if (introController.isShowOnlineTotal || introController.isShowDmCount)
             const Visibility(
               visible: false,
               maintainAnimation: true,
               maintainState: true,
               maintainSize: true,
               child: Text(
-                '0人正在看',
+                '0人正在看  0条弹幕',
                 maxLines: 1,
                 style: TextStyle(
                   color: Colors.white,

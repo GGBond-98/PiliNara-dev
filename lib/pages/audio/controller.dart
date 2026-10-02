@@ -345,26 +345,6 @@ class AudioController extends GetxController
     }
   }
 
-  /// 链路在「宽带档 / 蜂窝档」之间翻转：改用该档的默认音质重新取流，
-  /// 保留当前进度与播放/暂停状态。
-  Future<void> _onNetworkScopeChanged(bool useCellular) async {
-    if (isClosed) return;
-    cacheAudioQa = useCellular
-        ? Pref.defaultAudioQaCellular
-        : Pref.defaultAudioQa;
-    final player = this.player;
-    // 正在取流时丢弃本次事件即可：那次取流会用上面刚写入的 cacheAudioQa
-    if (player == null || _queryingPlayUrl) return;
-    final previousStart = _start;
-    _start = player.state.position;
-    _autoplayOnOpen = player.state.playing;
-    // 取流失败时不会走到 _onOpenMedia，两个一次性状态需要自己还原
-    if (!await _queryPlayUrl()) {
-      _start = previousStart;
-      _autoplayOnOpen = true;
-    }
-  }
-
   Future<bool> _queryPlayUrl() async {
     if (_queryingPlayUrl) return false;
     _queryingPlayUrl = true;

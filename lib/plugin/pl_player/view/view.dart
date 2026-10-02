@@ -30,6 +30,8 @@ import 'package:PiliPlus/models_new/video/video_detail/episode.dart' as ugc;
 import 'package:PiliPlus/models_new/video/video_detail/ugc_season.dart';
 import 'package:PiliPlus/pages/common/common_intro_controller.dart';
 import 'package:PiliPlus/pages/danmaku/danmaku_model.dart';
+import 'package:PiliPlus/pages/danmaku/mask/clip_driver.dart';
+import 'package:PiliPlus/pages/danmaku/mask/geometry.dart';
 import 'package:PiliPlus/pages/live_room/widgets/bottom_control.dart'
     as live_bottom;
 import 'package:PiliPlus/pages/video/controller.dart';
@@ -43,7 +45,6 @@ import 'package:PiliPlus/plugin/pl_player/models/data_status.dart';
 import 'package:PiliPlus/plugin/pl_player/models/double_tap_type.dart';
 import 'package:PiliPlus/plugin/pl_player/models/fullscreen_mode.dart';
 import 'package:PiliPlus/plugin/pl_player/models/gesture_type.dart';
-import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
 import 'package:PiliPlus/plugin/pl_player/models/speed_lock_hint.dart';
 import 'package:PiliPlus/plugin/pl_player/models/video_fit_type.dart';
 import 'package:PiliPlus/plugin/pl_player/utils/fullscreen.dart';
@@ -67,8 +68,6 @@ import 'package:PiliPlus/utils/image_utils.dart';
 import 'package:PiliPlus/utils/mobile_observer.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
-import 'package:PiliPlus/utils/storage.dart';
-import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:canvas_danmaku/canvas_danmaku.dart';
@@ -165,6 +164,13 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
 
   final _playerKey = GlobalKey();
   final _videoKey = GlobalKey();
+
+  /// 弹幕层相对播放器 Stack 的下沿偏移；Positioned.fill(top:) 与遮挡区几何共用，不要各写一份
+  static const double _kDanmakuTopInset = 4;
+
+  DanmakuMaskClipDriver? _maskDriver;
+  final List<StreamSubscription<dynamic>> _maskSubscriptions = [];
+  double _devicePixelRatio = 1;
 
   final RxDouble _brightnessValue = 0.0.obs;
   final RxBool _brightnessIndicator = false.obs;
@@ -316,6 +322,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
         }
       });
     }
+    _initDanmakuMask();
 
     if (PlatformUtils.isMobile) {
       Future.microtask(() async {
@@ -326,11 +333,12 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
             // 只保存系统音量，不改变播放器音量和显示指示器
             plPlayerController.systemVolume.value =
                 (await FlutterVolumeController.getVolume())!;
-            FlutterVolumeController.addListener((double value) {
-              if (mounted && !plPlayerController.volumeInterceptEventStream) {
-                // 只更新系统音量记录，不影响播放器音量和指示器显示
-                plPlayerController.systemVolume.value = value;
-              }
+            FlutterVolumeController.addListener(
+              (double value) {
+                if (mounted && !plPlayerController.volumeInterceptEventStream) {
+                  // 只更新系统音量记录，不影响播放器音量和指示器显示
+                  plPlayerController.systemVolume.value = value;
+                }
               },
               // The plugin defaults to ambient and overwrites AVAudioSession.
               // Keep media playback audible regardless of listener/mpv init order.
@@ -503,6 +511,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
     _harmonyBrightnessSub = null;
     _controlsListener?.cancel();
     _animationController.dispose();
+    _disposeDanmakuMask();
     _transformationController
       ..removeListener(_onTransformChanged)
       ..dispose();
@@ -1155,6 +1164,9 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
   void didChangeDependencies() {
     super.didChangeDependencies();
     colorScheme = ColorScheme.of(context);
+    _devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+    // 首次计算遮挡区的地方（dpr 到这里才可读）
+    _maskDriver?.update();
   }
 
   @override
@@ -1164,6 +1176,88 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
         OS.isHarmony && plPlayerController.isPipMode) {
       plPlayerController.controls = false;
     }
+    if (oldWidget.maxWidth != widget.maxWidth ||
+        oldWidget.maxHeight != widget.maxHeight ||
+        oldWidget.isPipMode != widget.isPipMode ||
+        oldWidget.alignment != widget.alignment) {
+      // 同步调用即可：它标脏的是子树里的 ValueListenableBuilder，
+      // Flutter 允许在祖先 build 期间标脏后代
+      _maskDriver?.update();
+    }
+  }
+
+  void _initDanmakuMask() {
+    final maskController =
+        widget.videoDetailController?.danmakuMaskController;
+    if (maskController == null || plPlayerController.isLive) return;
+    // 本仓库的 videoController 是委托到 plPlayerController 的可空 getter
+    //（上游是 initState 里赋值的 late 字段），掩码驱动需要非空实例。
+    final videoController = this.videoController;
+    if (videoController == null) return;
+    final driver = _maskDriver = DanmakuMaskClipDriver(
+      frame: maskController.frame,
+      output: plPlayerController.danmakuMaskPath,
+      readInputs: _readDanmakuMaskInputs,
+    );
+    maskController.frame.addListener(driver.update);
+    _transformationController.addListener(driver.update);
+    videoController.rect.addListener(driver.update);
+    _maskSubscriptions.addAll([
+      plPlayerController.videoFit.listen((_) => driver.update()),
+      plPlayerController.flipX.listen((_) => driver.update()),
+      plPlayerController.flipY.listen((_) => driver.update()),
+    ]);
+  }
+
+  void _disposeDanmakuMask() {
+    final driver = _maskDriver;
+    if (driver == null) return;
+    _maskDriver = null;
+    widget.videoDetailController?.danmakuMaskController.frame
+        .removeListener(driver.update);
+    _transformationController.removeListener(driver.update);
+    videoController?.rect.removeListener(driver.update);
+    for (final subscription in _maskSubscriptions) {
+      subscription.cancel();
+    }
+    _maskSubscriptions.clear();
+    driver.detach();
+  }
+
+  DanmakuMaskInputs? _readDanmakuMaskInputs() {
+    if (widget.isPipMode) return null;
+    final rect = videoController?.rect.value;
+    // media_kit 在无画面时给 1×1 的 rect（SimpleVideo 用同一判据盖 fill 色）
+    if (rect == null || rect.isEmpty || (rect.width <= 1 && rect.height <= 1)) {
+      return null;
+    }
+    final viewport = Size(widget.maxWidth, widget.maxHeight);
+    final videoFit = plPlayerController.videoFit.value;
+    // 与 media_kit fork 的 SimpleVideo 盒子尺寸同式：rect/dpr，强制比例时宽 = 高 × 比例
+    final height = rect.height / _devicePixelRatio;
+    final aspectRatio = videoFit.aspectRatio;
+    final videoSize = Size(
+      aspectRatio == null ? rect.width / _devicePixelRatio : height * aspectRatio,
+      height,
+    );
+    final fit = DanmakuMaskGeometry.fittedBoxTransform(
+      fit: videoFit.boxFit,
+      alignment: widget.alignment,
+      childSize: videoSize,
+      boxSize: viewport,
+    );
+    if (fit == null) return null;
+    final videoToLayer = Matrix4.translationValues(0, -_kDanmakuTopInset, 0)
+      ..multiply(_transformationController.value)
+      ..multiply(
+        DanmakuMaskGeometry.flipTransform(
+          flipX: plPlayerController.flipX.value,
+          flipY: plPlayerController.flipY.value,
+          boxSize: viewport,
+        ),
+      )
+      ..multiply(fit);
+    return (videoSize: videoSize, videoToLayer: videoToLayer);
   }
 
   void _onPanStart(ScaleStartDetails details) {
@@ -1655,7 +1749,8 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
           size: 20,
           color: Colors.white,
         ),
-        onLongPress: (Platform.isAndroid || OS.isHarmony || kDebugMode) &&
+        onLongPress:
+            (Platform.isAndroid || OS.isHarmony || kDebugMode) &&
                 !plPlayerController.isLive
             ? _screenshotWebp
             : null,
@@ -1697,7 +1792,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
 
         if (widget.danmuWidget case final danmaku?)
           Positioned.fill(
-            top: 4,
+            top: _kDanmakuTopInset,
             child: TopInsetPadding(
               inset: portraitFullscreenTopInset(
                 isFullScreen: isFullScreen,
@@ -2520,6 +2615,8 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
               onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
               onPointerPanZoomEnd: _onPointerPanZoomEnd,
               onPointerDown: _onPointerDown,
+              onPointerUp: _onPointerUp,
+              onPointerCancel: _onPointerCancel,
               onPanStart: _onPanStart,
               onPanUpdate: _onPanUpdate,
               onPanEnd: _onPanEnd,
@@ -2539,6 +2636,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
                 child: Obx(
                   () {
                     final videoFit = plPlayerController.videoFit.value;
+                    // 几何镜像：改这里的 FittedBox / flip / Transform 结构要同步 DanmakuMaskGeometry
                     return Transform.flip(
                       flipX: plPlayerController.flipX.value,
                       flipY: plPlayerController.flipY.value,

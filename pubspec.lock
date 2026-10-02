@@ -152,10 +152,10 @@ packages:
     dependency: "direct main"
     description:
       name: battery_plus
-      sha256: "3853aa1e18ea1d15493dd1d3edac05770b4b95c1e691fb85934c5fd3b1ac0fcc"
+      sha256: "49f75523cd5461a44202d67c5e1c73b790f16a822475b6f116d50714cd64a0ab"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "7.1.1"
+    version: "7.1.2"
   battery_plus_ohos:
     dependency: "direct main"
     description:
@@ -258,8 +258,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: main
-      resolved-ref: a671d192051f44693228e8f51edf554aa045f6eb
+      ref: "feat/mask-region"
+      resolved-ref: dd95b61aaea4a6e1ad56ce13e4188b9edf57160f
       url: "https://github.com/Starfallan/canvas_danmaku.git"
     source: git
     version: "0.2.6"
@@ -1465,7 +1465,7 @@ packages:
     source: hosted
     version: "1.9.1"
   path_parsing:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: path_parsing
       sha256: "883402936929eac138ee0a45da5b0f2c80f89913e6dc3bf77eb65b84b409c6ca"

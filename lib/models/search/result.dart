@@ -6,6 +6,7 @@ import 'package:PiliPlus/utils/duration_utils.dart';
 import 'package:PiliPlus/utils/em.dart';
 import 'package:PiliPlus/utils/extension/iterable_ext.dart';
 import 'package:PiliPlus/utils/extension/string_ext.dart';
+import 'package:PiliPlus/utils/global_data.dart';
 
 abstract class SearchNumData<T> {
   SearchNumData({
@@ -38,7 +39,11 @@ class SearchAllData extends SearchNumData {
               break;
             case 'bili_user':
               if (isRefresh) {
-                list!.addAll(data.map((e) => SearchUserItemModel.fromJson(e)));
+                for (final e in data) {
+                  if (!GlobalData().blackMids.contains(e['mid'])) {
+                    list!.add(SearchUserItemModel.fromJson(e));
+                  }
+                }
               }
               break;
             case 'video':

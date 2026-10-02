@@ -576,8 +576,8 @@ class _GalleryViewerState extends State<GalleryViewer>
               },
               child: const Text('网页打开', style: TextStyle(fontSize: 14)),
             ),
-          ]
-          else if (widget.sources.length > 1)
+          ],
+          if (widget.sources.length > 1)
             DialogOption(
               onPressed: () {
                 Get.back();

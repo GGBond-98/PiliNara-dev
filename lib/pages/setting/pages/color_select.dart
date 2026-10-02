@@ -53,7 +53,9 @@ class _ColorSelectPageState extends State<ColorSelectPage> {
     val ??= !ctr.dynamicColor.value;
     if (val && !await MyApp.initPlatformState()) {
       SmartDialog.showToast('设备可能不支持动态取色');
-      return;
+      if (kReleaseMode) {
+        return;
+      }
     }
     ctr.dynamicColor.value = val;
     await GStorage.setting.put(SettingBoxKey.dynamicColor, val);

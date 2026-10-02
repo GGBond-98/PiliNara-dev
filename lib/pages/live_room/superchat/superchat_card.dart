@@ -161,14 +161,6 @@ class _SuperChatCardState extends State<SuperChatCard> {
     SuperChatTimeType.always => true,
   };
 
-  String _formatTime(int ts) {
-    final dt = DateTime.fromMillisecondsSinceEpoch(ts * 1000);
-    final h = dt.hour.toString().padLeft(2, '0');
-    final m = dt.minute.toString().padLeft(2, '0');
-    final s = dt.second.toString().padLeft(2, '0');
-    return '$h:$m:$s';
-  }
-
   @override
   Widget build(BuildContext context) {
     return _build(
@@ -179,6 +171,14 @@ class _SuperChatCardState extends State<SuperChatCard> {
       formatTime: _formatTime,
     );
   }
+}
+
+String _formatTime(int ts) {
+  final dt = DateTime.fromMillisecondsSinceEpoch(ts * 1000);
+  final h = dt.hour.toString().padLeft(2, '0');
+  final m = dt.minute.toString().padLeft(2, '0');
+  final s = dt.second.toString().padLeft(2, '0');
+  return '$h:$m:$s';
 }
 
 Widget _build({

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:PiliPlus/common/assets.dart';
@@ -158,7 +159,7 @@ class EpisodePanelState extends State<EpisodePanel>
         _initialTabIndex,
         duration: const Duration(milliseconds: 200),
       );
-      Future.delayed(const Duration(milliseconds: 300), jumpToCurrent);
+      Timer(const Duration(milliseconds: 300), jumpToCurrent);
     } else {
       jumpToCurrent();
     }
@@ -724,6 +725,7 @@ class EpisodePanelState extends State<EpisodePanel>
             final currentTabIndex = _currentTabIndex.value;
             if (currentTabIndex != _initialTabIndex) {
               _tabController.animateTo(_initialTabIndex);
+              // TODO(ohos): 上游用 Future.pause（Dart 3.13+），鸿蒙 Dart SDK(3.12) 暂不支持，先用 Future.delayed 等价替换
               await Future.delayed(const Duration(milliseconds: 225));
             }
             if (_initialTabIndex < _itemScrollController.length) {

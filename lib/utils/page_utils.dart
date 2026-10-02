@@ -551,7 +551,7 @@ abstract final class PageUtils {
     Dimension? dimension,
     Object? heroTag,
   }) {
-    final tag = heroTag ?? Utils.makeHeroTag(cid ?? bvid ?? aid);
+    final tag = heroTag ?? Utils.makeHeroTag(cid);
     final arguments = {
       'aid': aid ?? IdUtils.bv2av(bvid!),
       'bvid': bvid ?? IdUtils.av2bv(aid!),

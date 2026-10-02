@@ -316,6 +316,7 @@ class _VideoCardVState extends State<VideoCardV> {
               videoItem.pubdate,
               short: VideoCardV.shortFormat,
               long: VideoCardV.longFormat,
+              showYesterdayTime: false,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

@@ -58,7 +58,8 @@ import 'package:archive/archive.dart' show getCrc32;
 import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:easy_debounce/easy_throttle.dart';
 import 'package:floating/floating.dart';
-import 'package:flutter/foundation.dart' show clampDouble, kDebugMode;
+import 'package:flutter/foundation.dart'
+    show ValueNotifier, clampDouble, kDebugMode;
 import 'package:flutter/services.dart' show HapticFeedback, DeviceOrientation;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:flutter_volume_controller/flutter_volume_controller.dart';
@@ -451,6 +452,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   late RuleFilter filters = Pref.danmakuFilterRule;
   // 关联弹幕控制器
   DanmakuController<DanmakuExtra>? danmakuController;
+
+  /// 弹幕遮挡区（弹幕层坐标系）。PLVideoPlayer 的几何驱动写入，PlDanmaku 消费；
+  /// 两端都以此对象为交接点，画布重建（切 P）时 PlDanmaku 从这里补读。
+  final ValueNotifier<Path?> danmakuMaskPath = ValueNotifier(null);
   bool showDanmaku = true;
   Set<int> dmState = <int>{};
   late final mergeDanmaku = Pref.mergeDanmaku;
@@ -1539,6 +1544,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
             }
           }
         } else {
+          playerStatus = .paused;
+          _startWakeLockTimer();
           // 鸿蒙：退后台引发的暂停不取消自动画中画，否则该取消操作会与系统
           // 自动小窗的启动赛跑，导致自动小窗时灵时不灵（Android 的 PiP
           // auto-enter 与离开手势原子执行，无此问题）。仅在应用处于前台
@@ -1548,7 +1555,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
                   AppLifecycleState.resumed) {
             _disableAutoEnterPip();
           }
-          playerStatus = .paused;
           // 鸿蒙：进入画中画的退后台过程中，系统会直接把 mpv 置为暂停
           //（应用层无任何 pause 调用，插桩证实；auto-start 武装与否均如此）。
           // 画中画窗口可见即应继续播放，且普通 play() 即可恢复（等效于
@@ -1561,8 +1567,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
               _pipAutoResumeAllowed()) {
             play();
           }
-
-          _startWakeLockTimer();
         }
         if (OS.isHarmony) {
           // 同步鸿蒙小窗控制面板的播放/暂停图标
@@ -1897,7 +1901,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     }
 
     await _rawPlay();
-    // screenManager.setOverlays(false);
   }
 
   /// 暂停播放
@@ -3058,6 +3061,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       showSystemBar();
     }
     danmakuController = null;
+    danmakuMaskPath.value = null;
     _stopOrientationListener();
     _disableAutoEnterPip();
     setPlayCallBack(null);
@@ -3108,6 +3112,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _videoPlayerController = null;
     _videoControllerNotifier.value = null;
     _activeVideoContextKey = null;
+    danmakuMaskPath.dispose();
     _instance = null;
     videoPlayerServiceHandler?.clear();
     HarmonyChannel.releaseContinuation(this);
@@ -3334,49 +3339,49 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     SmartDialog.showToast('截图中');
     // 鸿蒙 media_kit fork 的 screenshot 返回 Uint8List（上游 fork 返回 ui.Image）
     final bytes = await videoPlayerController?.screenshot(format: 'image/png');
-    if (bytes == null) {
-      SmartDialog.showToast('截图失败');
-      return;
-    }
-    final time = DurationUtils.formatDuration(
-      positionInMilliseconds / 1000,
-    ).replaceAll(':', '-');
-    SmartDialog.showToast('点击弹窗保存截图');
-    showDialog(
-      context: Get.context!,
-      builder: (context) => GestureDetector(
-        onTap: () {
-          Get.back();
-          ImageUtils.saveByteImg(
-            bytes: bytes,
-            fileName: 'screenshot_${cid}_$time',
-          );
-        },
-        child: Align(
-          alignment: Alignment.centerRight,
-          child: Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: min(MediaQuery.widthOf(context) / 3, 350),
-              ),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    width: 5,
-                    color: ColorScheme.of(context).surface,
-                  ),
+    if (bytes != null) {
+      SmartDialog.showToast('点击弹窗保存截图');
+      await showDialog<bool>(
+        context: Get.context!,
+        builder: (context) => GestureDetector(
+          onTap: () async {
+            Get.back(result: false);
+            final time = DurationUtils.formatDuration(
+              positionInMilliseconds / 1000,
+            ).replaceAll(':', '-');
+            ImageUtils.saveByteImg(
+              bytes: bytes,
+              fileName: 'screenshot_${cid}_$time',
+            );
+          },
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: min(MediaQuery.widthOf(context) / 3, 350),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(5),
-                  child: Image.memory(bytes),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      width: 5,
+                      color: ColorScheme.of(context).surface,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(5),
+                    child: Image.memory(bytes),
+                  ),
                 ),
               ),
             ),
           ),
         ),
-      ),
-    );
+      );
+    } else {
+      SmartDialog.showToast('截图失败');
+    }
   }
 
   void onPopInvokedWithResult(

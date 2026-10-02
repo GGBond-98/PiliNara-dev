@@ -31,6 +31,14 @@ abstract class CommonSearchPanelState<
 
   bool _isLoadingMore = false;
 
+  late ColorScheme colorScheme;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    colorScheme = ColorScheme.of(context);
+  }
+
   @override
   bool get wantKeepAlive => true;
 
@@ -71,16 +79,13 @@ abstract class CommonSearchPanelState<
         () {
           final filtered = controller.filterKeywords(response, getTitle);
           if (filtered.isEmpty) {
-            return _buildFilteredOut(theme);
+            return _buildFilteredOut();
           }
           final showLoadMore = controller.hasKeywordFilter &&
               filtered.length <= 5;
           if (!showLoadMore) return buildList(theme, filtered);
           return SliverMainAxisGroup(
-            slivers: [
-              buildList(theme, filtered),
-              _buildInlineLoadMore(theme),
-            ],
+            slivers: [buildList(theme, filtered), _buildInlineLoadMore()],
           );
         }(),
       Success() => HttpError(onReload: controller.onReload),
@@ -102,7 +107,7 @@ abstract class CommonSearchPanelState<
     }
   }
 
-  Widget _buildFilteredOut(ThemeData theme) {
+  Widget _buildFilteredOut() {
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Center(
@@ -114,7 +119,7 @@ abstract class CommonSearchPanelState<
               Icon(
                 Icons.filter_list_off,
                 size: 48,
-                color: theme.colorScheme.outline,
+                color: colorScheme.outline,
               ),
               const SizedBox(height: 12),
               Text(
@@ -122,7 +127,7 @@ abstract class CommonSearchPanelState<
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w500,
-                  color: theme.colorScheme.onSurface,
+                  color: colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 6),
@@ -131,7 +136,7 @@ abstract class CommonSearchPanelState<
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,
-                  color: theme.colorScheme.outline,
+                  color: colorScheme.outline,
                 ),
               ),
               const SizedBox(height: 16),
@@ -153,7 +158,7 @@ abstract class CommonSearchPanelState<
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 11,
-                  color: theme.colorScheme.outline,
+                  color: colorScheme.outline,
                 ),
               ),
             ],
@@ -165,7 +170,7 @@ abstract class CommonSearchPanelState<
 
   Widget? buildHeader(ThemeData theme) => null;
 
-  Widget _buildInlineLoadMore(ThemeData theme) {
+  Widget _buildInlineLoadMore() {
     return SliverToBoxAdapter(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),

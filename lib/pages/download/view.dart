@@ -24,8 +24,6 @@ import 'package:PiliPlus/services/download/download_collection_service.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
 import 'package:PiliPlus/utils/grid.dart';
 import 'package:PiliPlus/utils/storage.dart';
-import 'package:PiliPlus/utils/path_utils.dart';
-import 'package:PiliPlus/utils/share_utils.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
@@ -61,7 +59,7 @@ class _DownloadPageState extends State<DownloadPage>
   late final _folderSelectController = Get.put(
     DownloadFolderSelectController(_controller),
   );
-  final _progress = ChangeNotifier();
+  final _progress = _ProgressNotifier();
 
   late final TabController _tabController;
   int _tabIndex = 0;
@@ -197,7 +195,7 @@ class _DownloadPageState extends State<DownloadPage>
       if (!mounted) {
         return;
       }
-      _progress.notifyListeners();
+      _progress.notify();
       await _controller.refreshContinueTarget();
     } finally {
       if (mounted) {
@@ -770,4 +768,10 @@ class _DownloadPageState extends State<DownloadPage>
       ),
     );
   }
+}
+
+/// 供本页及子页手动触发刷新的进度通知器：[ChangeNotifier.notifyListeners]
+/// 受 @protected/@visibleForTesting 限制，只能在子类实例方法内调用。
+class _ProgressNotifier extends ChangeNotifier {
+  void notify() => notifyListeners();
 }

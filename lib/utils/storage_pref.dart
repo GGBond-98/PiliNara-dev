@@ -868,6 +868,9 @@ abstract final class Pref {
   static bool get removeOnlyFansVideoDyn =>
       _setting.get(SettingBoxKey.removeOnlyFansVideoDyn, defaultValue: false);
 
+  static bool get removeDynVideoDyn =>
+      _setting.get(SettingBoxKey.removeDynVideoDyn, defaultValue: false);
+
   static bool get antiGoodsReply =>
       _setting.get(SettingBoxKey.antiGoodsReply, defaultValue: false);
 
@@ -1219,6 +1222,9 @@ abstract final class Pref {
   static bool get enableShowLiveDanmaku =>
       _setting.get(SettingBoxKey.enableShowLiveDanmaku, defaultValue: true);
 
+  static bool get enableDanmakuMask =>
+      _setting.get(SettingBoxKey.enableDanmakuMask, defaultValue: false);
+
   static bool get enableQuickFav =>
       _setting.get(SettingBoxKey.enableQuickFav, defaultValue: false);
 
@@ -1389,6 +1395,9 @@ abstract final class Pref {
   static bool get enableOnlineTotal =>
       _setting.get(SettingBoxKey.enableOnlineTotal, defaultValue: false);
 
+  static bool get enableDmCount =>
+      _setting.get(SettingBoxKey.enableDmCount, defaultValue: false);
+
   static bool get autoEnterFullScreen =>
       _setting.get(SettingBoxKey.enableAutoEnter, defaultValue: false);
 
@@ -1438,8 +1447,10 @@ abstract final class Pref {
   static bool get continuePlayInBackground =>
       _setting.get(SettingBoxKey.continuePlayInBackground, defaultValue: false);
 
-  static bool get autoAudioOnlyInBackground =>
-      _setting.get(SettingBoxKey.autoAudioOnlyInBackground, defaultValue: false);
+  static bool get autoAudioOnlyInBackground => _setting.get(
+    SettingBoxKey.autoAudioOnlyInBackground,
+    defaultValue: false,
+  );
 
   static bool get directExitOnBack =>
       _setting.get(SettingBoxKey.directExitOnBack, defaultValue: false);
@@ -1651,6 +1662,22 @@ abstract final class Pref {
   static set aiPromptTemplates(String value) =>
       _setting.put(SettingBoxKey.aiPromptTemplates, value);
 
+  static bool get aiAutoScroll =>
+      _setting.get(SettingBoxKey.aiAutoScroll, defaultValue: true);
+
+  static set aiAutoScroll(bool value) =>
+      _setting.put(SettingBoxKey.aiAutoScroll, value);
+
+  /// 思考强度（reasoning_effort）：未干预服务商默认行为时为 'default'。
+  static String get aiReasoningEffort {
+    final value =
+        _setting.get(SettingBoxKey.aiReasoningEffort, defaultValue: 'default');
+    return value == 'auto' ? 'default' : value;
+  }
+
+  static set aiReasoningEffort(String value) =>
+      _setting.put(SettingBoxKey.aiReasoningEffort, value);
+
   static int get angleDegrees =>
       _setting.get(SettingBoxKey.angleDegrees, defaultValue: 30);
 
@@ -1675,8 +1702,7 @@ abstract final class Pref {
   static int get videoSaturation =>
       _videoPictureParameter(SettingBoxKey.videoSaturation);
 
-  static int get videoGamma =>
-      _videoPictureParameter(SettingBoxKey.videoGamma);
+  static int get videoGamma => _videoPictureParameter(SettingBoxKey.videoGamma);
 
   static int get videoHue => _videoPictureParameter(SettingBoxKey.videoHue);
 
@@ -1701,13 +1727,12 @@ abstract final class Pref {
   );
 
   /// 已导入字体的显示名：字体族名 → 从字体文件解析出的名字
-  static Map<String, String> get customAppFontNames =>
-      Map<String, String>.from(
-        _setting.get(
-          SettingBoxKey.customAppFontNames,
-          defaultValue: const <String, String>{},
-        ),
-      );
+  static Map<String, String> get customAppFontNames => Map<String, String>.from(
+    _setting.get(
+      SettingBoxKey.customAppFontNames,
+      defaultValue: const <String, String>{},
+    ),
+  );
 
   static bool get enableEmoteTooltip =>
       _setting.get(SettingBoxKey.enableEmoteTooltip, defaultValue: false);

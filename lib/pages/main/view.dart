@@ -51,6 +51,7 @@ class _MainAppState extends PopScopeState<MainApp>
   late bool _enableGradientBg;
   late EdgeInsets _padding;
   late ThemeData theme;
+  late ColorScheme _colorScheme;
   Brightness? _brightness;
   Worker? _nativeTabsWorker;
   Worker? _nativeTopBarWorker;
@@ -101,7 +102,7 @@ class _MainAppState extends PopScopeState<MainApp>
         _handleTray();
       }
     }
-    if (PlatformUtils.isMobile || Platform.isLinux || Platform.isWindows) {
+    if (!Platform.isMacOS) {
       PiliScheme.init();
     }
   }
@@ -111,6 +112,7 @@ class _MainAppState extends PopScopeState<MainApp>
     super.didChangeDependencies();
     _padding = MediaQuery.viewPaddingOf(context);
     theme = Theme.of(context);
+    _colorScheme = ColorScheme.of(context);
     final brightness = theme.brightness;
     NetworkImgLayer.reduce =
         NetworkImgLayer.reduceLuxColor != null && brightness.isDark;
@@ -621,29 +623,8 @@ class _MainAppState extends PopScopeState<MainApp>
     if (_enableGradientBg) {
       child = Stack(
         children: [
-          Container(color: Theme.of(context).colorScheme.surface),
-          Align(
-            alignment: Alignment.topLeft,
-            child: Opacity(
-              opacity: 0.6,
-              child: Container(
-                width: MediaQuery.sizeOf(context).width,
-                height: MediaQuery.sizeOf(context).height,
-                decoration: BoxDecoration(
-                gradient: LinearGradient(
-                    colors: [
-                      Theme.of(context).colorScheme.primary.withValues(alpha: 0.6),
-                      Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.6),
-                      Theme.of(context).colorScheme.surface,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    stops: const [0.1, 0.4, 0.7],
-                  ),
-                ),
-              ),
-            ),
-          ),
+          Container(color: _colorScheme.surface),
+          Positioned.fill(child: _gradientBg()),
           mainLayout,
         ],
       );
@@ -669,6 +650,26 @@ class _MainAppState extends PopScopeState<MainApp>
     }
 
     return child;
+  }
+
+  Widget _gradientBg() {
+    return Opacity(
+      opacity: .6,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              _colorScheme.primary.withValues(alpha: .6),
+              _colorScheme.primaryContainer.withValues(alpha: .6),
+              _colorScheme.surface,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            stops: const [.1, .4, .7],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildIcon({required NavigationBarType type, bool selected = false}) {
