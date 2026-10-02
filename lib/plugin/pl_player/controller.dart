@@ -91,6 +91,14 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
   static PlPlayerController? _instance;
 
+  /// 真正的销毁已经开始（区别于 _playerCount 递减的早退路径）。
+  /// dispose() 的收尾是异步的（等在途数据源与底层播放器释放），在尾部把
+  /// _instance 置空之前，新页面可能已经通过 getInstance()/ensureInstance()
+  /// 领走仍在拆解中的实例——随后尾部会清空它的播放器引用、平台视图通知器
+  /// 与全局 service handler，新页面表现为黑屏、控件失效。标记后这些入口
+  /// 立即丢弃该实例，让调用方拿到全新的实例。
+  bool _disposeRequested = false;
+
   PlayerStatus playerStatus = .paused;
 
   final Rx<DataStatus> dataStatus = Rx(.none);
@@ -863,6 +871,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
   // 获取实例 传参
   static PlPlayerController getInstance({bool isLive = false}) {
+    _dropDisposedInstance();
     // 如果实例尚未创建，则创建一个新实例
     return (_instance ??= PlPlayerController._())
       ..isLive = isLive
@@ -870,7 +879,18 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   }
 
   static PlPlayerController ensureInstance({bool isLive = false}) {
+    _dropDisposedInstance();
     return (_instance ??= PlPlayerController._())..isLive = isLive;
+  }
+
+  /// dispose() 是异步收尾，尾部才把 _instance 置空；其间任何获取实例的调用
+  /// （新视频页构造、playerInit 重取等）都会领走仍在拆解中的僵尸实例，收尾
+  /// 随后清空其播放器/通知器/静态引用 → 新页面黑屏、控件失效。
+  /// 发现标记即丢弃引用，让调用方拿到全新实例。
+  static void _dropDisposedInstance() {
+    if (_instance?._disposeRequested ?? false) {
+      _instance = null;
+    }
   }
 
   static bool _isAnimPgcType(int? pgcType) => pgcType == 1 || pgcType == 4;
@@ -3052,6 +3072,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   }
 
   Future<void> dispose() async {
+    if (_disposeRequested) {
+      // 已在销毁流程中（或已销毁），幂等返回
+      return;
+    }
     _cancelAutoAudioOnlyTimer();
     _interruptAutoAudioRestore();
     _autoAudioState = AutoAudioOnlyState.idle;
@@ -3071,6 +3095,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       return;
     }
 
+    // 走到此处才是真正的销毁（而非计数递减）。立即标记：异步收尾期间新页面
+    // 通过 getInstance()/ensureInstance() 获取实例时会丢弃本实例并新建
+    // （见 _dropDisposedInstance），避免把僵尸实例交给新页面。
+    _disposeRequested = true;
     _playerCount = 0;
     if (removeSafeArea) {
       showSystemBar();
@@ -3128,8 +3156,15 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _videoControllerNotifier.value = null;
     _activeVideoContextKey = null;
     danmakuMaskPath.dispose();
-    _instance = null;
-    videoPlayerServiceHandler?.clear();
+    // 收尾期间新页面可能已通过 _dropDisposedInstance 领走/重建了单例：
+    // 此时不能把新实例的静态引用清掉，也不能 clear 新页面正在使用的
+    // 全局 service handler（否则新页面黑屏、控件失效）
+    if (identical(_instance, this)) {
+      _instance = null;
+    }
+    if (_instance == null) {
+      videoPlayerServiceHandler?.clear();
+    }
     HarmonyChannel.releaseContinuation(this);
   }
 
