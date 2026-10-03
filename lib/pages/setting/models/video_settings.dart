@@ -13,6 +13,7 @@ import 'package:PiliPlus/plugin/pl_player/models/audio_output_type.dart';
 import 'package:PiliPlus/plugin/pl_player/models/hwdec_type.dart';
 import 'package:PiliPlus/services/service_locator.dart';
 import 'package:PiliPlus/utils/filtering_text.dart';
+import 'package:PiliPlus/utils/platform_utils.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
@@ -85,7 +86,7 @@ List<SettingsModel> get videoSettings => [
     defaultVal: false,
     onChanged: (value) => VideoUtils.disableAudioCDN = value,
   ),
-  if (Platform.isAndroid || Platform.isIOS)
+  if (PlatformUtils.isMobile)
     NormalModel(
       title: '半屏默认画质',
       leading: const Icon(Icons.video_settings_outlined),
