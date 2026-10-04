@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:PiliPlus/utils/extension/scroll_controller_ext.dart';
 import 'package:flutter/rendering.dart'
     show
@@ -128,7 +130,7 @@ class _RenderScaffoldLayout extends RenderBox
   RenderBox? get fab => childForSlot(.fab);
   RenderBox? get appBar => childForSlot(.appBar);
   RenderBox? get statusBar => childForSlot(.statusBar);
-  RenderBox get body => childForSlot(.body)!;
+  RenderBox? get body => childForSlot(.body);
 
   Offset _getOffset(RenderBox child) {
     return (child.parentData as BoxParentData).offset;
@@ -166,15 +168,18 @@ class _RenderScaffoldLayout extends RenderBox
       bodyOffset = Offset(0, appBarHeight);
       bodyConstraints = BoxConstraints.tightFor(
         width: constraints.maxWidth,
-        height: constraints.maxHeight - appBarHeight,
+        height: math.max(constraints.maxHeight - appBarHeight, 0.0),
       );
     } else {
       bodyOffset = .zero;
       bodyConstraints = constraints;
     }
 
-    final body = this.body..layout(bodyConstraints);
-    _setOffset(body, bodyOffset);
+    final body = this.body;
+    if (body != null) {
+      body.layout(bodyConstraints);
+      _setOffset(body, bodyOffset);
+    }
 
     final fab = this.fab;
     if (fab != null) {
