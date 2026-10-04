@@ -117,11 +117,9 @@ class DynamicsController
   }
 
   @override
-  Future<void> animateToTop() {
-    return Future.wait([
-      if (controller case final ctr?) ctr.animateToTop(),
-      scrollController.animToTop(),
-    ]);
+  void animateToTop() {
+    controller?.animateToTop();
+    scrollController.animToTop();
   }
 
   @override
@@ -160,7 +158,7 @@ class DynamicsController
             scrollController.hasClients &&
             scrollController.position.pixels != 0;
         if (shouldScrollChild || shouldScrollParent) {
-          await animateToTop();
+          animateToTop();
         }
         await _showRefreshFor(ctr);
       },

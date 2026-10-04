@@ -18,7 +18,7 @@ mixin ScrollOrRefreshMixin {
   String get topAndRefreshThrottleKey =>
       'topAndRefresh_${identityHashCode(this)}';
 
-  Future<void> animateToTop() => scrollController.animToTop();
+  void animateToTop() => scrollController.animToTop();
 
   Future<void> onRefresh();
 
@@ -29,7 +29,7 @@ mixin ScrollOrRefreshMixin {
       () async {
         if (scrollController.hasClients &&
             scrollController.position.pixels != 0) {
-          await animateToTop();
+          animateToTop();
         }
         await showRefresh();
       },
