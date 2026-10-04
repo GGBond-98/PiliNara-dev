@@ -309,9 +309,9 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: patch-1
-      resolved-ref: "6f8dce7b71396b713ab3d71cb20a04967c5458fd"
-      url: "https://github.com/dongfengweixiao/flutter_clipboard.git"
+      ref: br_ohos_dev
+      resolved-ref: "50c0f09e39c7824cf48c24ecac6272d132f09db8"
+      url: "https://gitcode.com/flutter_ohos_plugin/flutter_clipboard.git"
     source: git
     version: "3.0.14"
   clock:

@@ -17,7 +17,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
 # update when release
-version: 2.1.5+6851
+version: 2.1.5+6852
 
 environment:
   sdk: ">=3.12.2"
@@ -414,11 +414,11 @@ dependency_overrides:
       url: https://github.com/My-Responsitories/media-kit.git
       path: libs/windows/media_kit_libs_windows_video
       ref: version_1.2.5
-  # PiliNara 独有：clipboard 3.x 原生实现不满足需求，指向其补丁分支
+  # clipboard 鸿蒙适配（用于复制图片等功能）
   clipboard:
     git:
-      url: https://github.com/dongfengweixiao/flutter_clipboard.git
-      ref: patch-1
+      url: https://gitcode.com/flutter_ohos_plugin/flutter_clipboard.git
+      ref: br_ohos_dev
   image_picker:
     git:
       url: https://gitcode.com/CPF-Flutter/flutter_packages.git
