@@ -940,10 +940,7 @@ abstract final class Pref {
     defaultValue: LiveQuality.superHD.code,
   );
 
-  /// `FontWeight.values` 的下标；`-1` 表示「跟随系统」——鸿蒙下由
-  /// [ThemeUtils.getThemeData] 读 `HarmonyChannel.systemFontWeightScale` 映射成
-  /// 具体字重（见 lib/utils/theme_utils.dart）。上游 828de30e9 把这一档去掉、
-  /// 返回值改成了 `FontWeight`，鸿蒙保留 `int` + `-1`，只跟进它的 V1→V2 键迁移。
+  /// `FontWeight.values` 的下标；鸿蒙下`-1` 表示「跟随系统」
   static int get appFontWeight {
     // TODO: remove next 2 version
     const appFontWeightV1 = 'appFontWeight';
