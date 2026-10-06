@@ -6,7 +6,7 @@
       "icon": "$media:icon_shortcut_search",
       "wants": [
         {
-          "bundleName": "com.dev4harmony.pilinara",
+          "bundleName": "com.pilinara.dev",
           "moduleName": "entry",
           "abilityName": "EntryAbility",
           "parameters": {
@@ -21,7 +21,7 @@
       "icon": "$media:icon_shortcut_offline",
       "wants": [
         {
-          "bundleName": "com.dev4harmony.pilinara",
+          "bundleName": "com.pilinara.dev",
           "moduleName": "entry",
           "abilityName": "EntryAbility",
           "parameters": {
@@ -36,7 +36,7 @@
       "icon": "$media:icon_shortcut_history",
       "wants": [
         {
-          "bundleName": "com.dev4harmony.pilinara",
+          "bundleName": "com.pilinara.dev",
           "moduleName": "entry",
           "abilityName": "EntryAbility",
           "parameters": {
@@ -51,7 +51,7 @@
       "icon": "$media:icon_shortcut_favorite",
       "wants": [
         {
-          "bundleName": "com.dev4harmony.pilinara",
+          "bundleName": "com.pilinara.dev",
           "moduleName": "entry",
           "abilityName": "EntryAbility",
           "parameters": {

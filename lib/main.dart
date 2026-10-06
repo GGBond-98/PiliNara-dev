@@ -81,7 +81,7 @@ Future<void> _initDownPath() async {
       downloadPath = defDownloadPath;
     }
   } else if (OS.isHarmony) {
-    downloadPath = 'storage/Users/currentUser/Download/com.dev4harmony.pilinara';
+    downloadPath = 'storage/Users/currentUser/Download/com.pilinara.dev';
   } else if (Platform.isAndroid) {
     final externalStorageDirPath = (await getExternalStorageDirectory())?.path;
     downloadPath = externalStorageDirPath != null
