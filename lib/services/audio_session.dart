@@ -4,13 +4,27 @@ import 'package:PiliPlus/plugin/pl_player/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:audio_session/audio_session.dart';
+import 'package:os_type/os_type.dart';
 
 class AudioSessionHandler {
   late AudioSession session;
   bool _playInterrupted = false;
 
   Future<bool> setActive(bool active) {
-    return session.setActive(active);
+    return session.setActive(
+      active,
+      // 鸿蒙：PAUSE_OTHERS 仅在本次申请焦点时生效，之后其他应用申请焦点
+      // 遵循对方模式，后台应用（画中画）的音频流会被默认策略强停且 mpv
+      // 感知不到。MIX_WITH_OTHERS 双向生效，其他应用起流也不会打断本应用，
+      // 开启"同时播放"或处于画中画时使用。
+      ohosAudioConcurrencyMode:
+          OS.isHarmony &&
+              active &&
+              (Pref.mixWithOthers ||
+                  PlPlayerController.instance?.isPipMode == true)
+          ? AudioConcurrencyMode.concurrencyMixWithOthers
+          : null,
+    );
   }
 
   AudioSessionHandler() {
