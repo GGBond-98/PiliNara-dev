@@ -513,6 +513,7 @@ class _MainAppState extends PopScopeState<MainApp>
                 )
               : Obx(
                   () => NavigationRail(
+                    backgroundColor: Colors.transparent,
                     groupAlignment: 0.5,
                     selectedIndex: _mainController.selectedIndex.value,
                     onDestinationSelected: _mainController.setIndex,
@@ -581,16 +582,22 @@ class _MainAppState extends PopScopeState<MainApp>
       bottomNav = _bottomNav;
       child = Row(children: [Expanded(child: child)]);
     } else {
-      child = Row(
-        children: [
-          _sideBar(theme),
-          VerticalDivider(
-            width: 1,
-            endIndent: _padding.bottom,
-            color: theme.colorScheme.outline.withValues(alpha: 0.06),
-          ),
-          Expanded(child: child),
-        ],
+      // 横屏侧栏布局：侧栏是透明的 NavigationRail。这里用透明 ColoredBox 包一层，
+      // 让 body 与 Scaffold 同层绘制；开启「首页背景渐变」时 Scaffold 为透明，
+      // 背景 Stack（含渐变）能透到侧栏之下，侧栏区域随之呈现与首页一致的渐变。
+      child = ColoredBox(
+        color: Colors.transparent,
+        child: Row(
+          children: [
+            _sideBar(theme),
+            VerticalDivider(
+              width: 1,
+              endIndent: _padding.bottom,
+              color: theme.colorScheme.outline.withValues(alpha: 0.06),
+            ),
+            Expanded(child: child),
+          ],
+        ),
       );
     }
 
@@ -601,7 +608,8 @@ class _MainAppState extends PopScopeState<MainApp>
         : const Color.fromARGB(0, 0, 0, 0);
 
     final mainLayout = Scaffold(
-      // Nara 渐变背景需要骨架透明才能透出渐变层
+      // Nara 渐变背景需要骨架透明才能透出渐变层；extendBody 让 body（含横屏侧栏）
+      // 延伸到骨架之下，透明骨架下即为背景 Stack 的渐变，侧栏区域也能透出渐变。
       backgroundColor: _enableGradientBg ? Colors.transparent : null,
       extendBody: true,
       resizeToAvoidBottomInset: false,
