@@ -4,13 +4,22 @@ import 'package:PiliPlus/plugin/pl_player/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:audio_session/audio_session.dart';
+import 'package:os_type/os_type.dart';
 
 class AudioSessionHandler {
   late AudioSession session;
   bool _playInterrupted = false;
 
   Future<bool> setActive(bool active) {
-    return session.setActive(active);
+    return session.setActive(
+      active,
+      // 鸿蒙：会话并发模式是「与其他应用同时播放」的唯一控制点（iOS 用 AVAudioSession
+      // 类别、Android 用焦点协商）。开启混音时请求 concurrencyMixWithOthers，否则不传、
+      // 回落到插件默认的 concurrencyPauseOthers，非鸿蒙平台行为与上游一致。
+      ohosAudioConcurrencyMode: OS.isHarmony && Pref.mixWithOthers
+          ? AudioConcurrencyMode.concurrencyMixWithOthers
+          : null,
+    );
   }
 
   AudioSessionHandler() {
