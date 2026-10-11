@@ -34,7 +34,7 @@ libmpv 在鸿蒙上已经会把 NativeWindow 切到 BT.2020 PQ / HLG，并挂上
 
 ## 设置
 
-- **启用 HDR 视频**：默认关闭。关闭或面板明确不支持 HDR 时，HDR 片源也按 SDR 输出。
+- **启用 HDR 视频**：默认开启。关闭或面板明确不支持 HDR 时，HDR 片源也按 SDR 输出。
 - **HDR 峰值亮度**：色调映射的目标峰值，默认 1600 nit，可在 200–10000 之间修改。鸿蒙没有查询面板峰值亮度的接口，只能由用户按屏幕参数填写；修改后从下一次创建播放器起生效。
 
 ## 信令
@@ -50,7 +50,7 @@ libmpv 在鸿蒙上已经会把 NativeWindow 切到 BT.2020 PQ / HLG，并挂上
 - 动态元数据由 libplacebo 逐帧用于色调映射，不转交给系统合成器。
 - 不下发 `--target-peak` 时，libplacebo 会按 PQ 的名义峰值 10000 nit 推算目标亮度，高光被过度压暗。
 - 纹理路径输出 SDR 时也不能下发 `--target-peak`：SDR 目标配上上千 nit 的峰值，整幅画面会被压暗。
-- 纹理路径沿用 cnoim 的 SDR 目标（media-kit 762fdc63：BT.709 / BT.1886，spline 色调映射）。「启用 HDR 视频」关闭（默认）时，所有片源都按这个 SDR 目标输出，与上游现状一致。
+- 纹理路径沿用 cnoim 的 SDR 目标（media-kit 762fdc63：BT.709 / BT.1886，spline 色调映射）。「启用 HDR 视频」关闭时，所有片源都按这个 SDR 目标输出，与上游现状一致。
 
 逻辑在 `OhosHdrOutput`（`lib/plugin/pl_player/models/ohos_hdr_output.dart`），有单元测试覆盖。
 
