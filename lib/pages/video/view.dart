@@ -34,10 +34,10 @@ import 'package:PiliPlus/models_new/video/video_detail/ugc_season.dart';
 import 'package:PiliPlus/models_new/video/video_tag/data.dart';
 import 'package:PiliPlus/pages/ai_chat/controller.dart';
 import 'package:PiliPlus/pages/ai_chat/view.dart';
-import 'package:PiliPlus/pages/live_room/controller.dart';
 import 'package:PiliPlus/pages/common/common_intro_controller.dart';
 import 'package:PiliPlus/pages/danmaku/view.dart';
 import 'package:PiliPlus/pages/episode_panel/view.dart';
+import 'package:PiliPlus/pages/live_room/controller.dart';
 import 'package:PiliPlus/pages/video/ai_conclusion/view.dart';
 import 'package:PiliPlus/pages/video/controller.dart';
 import 'package:PiliPlus/pages/video/introduction/local/controller.dart';
@@ -54,9 +54,9 @@ import 'package:PiliPlus/pages/video/member/view.dart';
 import 'package:PiliPlus/pages/video/related/view.dart';
 import 'package:PiliPlus/pages/video/reply/controller.dart';
 import 'package:PiliPlus/pages/video/reply/view.dart';
-import 'package:PiliPlus/pages/video/widgets/keyboard_scrollable.dart';
 import 'package:PiliPlus/pages/video/view_point/view.dart';
 import 'package:PiliPlus/pages/video/widgets/header_control.dart';
+import 'package:PiliPlus/pages/video/widgets/keyboard_scrollable.dart';
 import 'package:PiliPlus/pages/video/widgets/player_focus.dart';
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/models/fullscreen_mode.dart';
@@ -88,10 +88,10 @@ import 'package:extended_nested_scroll_view/extended_nested_scroll_view.dart';
 import 'package:floating/floating.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, clampDouble;
 import 'package:flutter/services.dart' show SystemChrome;
-import 'package:material_ui/material_ui.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:os_type/os_type.dart';
 import 'package:screen_brightness_platform_interface/screen_brightness_platform_interface.dart';
 
@@ -3190,6 +3190,11 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     final controller = plPlayerController;
     if (controller == null || controller.videoController == null) {
       _logSponsorBlock('Reject PiP: controller or videoController is null');
+      return false;
+    }
+    if (controller.isCloseAll) {
+      // 返回首页不生成应用内小窗
+      _logSponsorBlock('Reject PiP: close-all teardown in progress');
       return false;
     }
     if (controller.isDesktopPip || controller.isPipMode) {
