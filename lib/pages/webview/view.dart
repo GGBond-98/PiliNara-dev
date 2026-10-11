@@ -426,6 +426,9 @@ document.addEventListener('click', function(e) {
                   useHybridComposition: true,
                   algorithmicDarkeningAllowed: true,
                   useShouldOverrideUrlLoading: true,
+                  // stupid cpf webview插件开启该拦截后部分请求失效
+                  // fix https://github.com/dev4harmony/PiliPlus/issues/193
+                  useShouldInterceptRequest: false,
                   userAgent: userAgent,
                   mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
                 ),
