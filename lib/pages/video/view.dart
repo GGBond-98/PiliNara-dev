@@ -1403,13 +1403,6 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
       () {
         final isFullScreen = this.isFullScreen;
         return SimpleScaffold(
-          // 全屏 + 平台视图时，Scaffold 的 Material 底色也在视频之上，必须透明。
-          // 只限全屏：竖屏下 MiniScaffold 自己不画背景，全局透明会露出下层。
-          backgroundColor:
-              isFullScreen &&
-                  (plPlayerController?.usePlatformViewRx.value ?? false)
-              ? Colors.transparent
-              : null,
           appBar: removeAppBar(isFullScreen)
               ? null
               : Obx(
@@ -1708,13 +1701,6 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     () {
       final isFullScreen = this.isFullScreen;
       return SimpleScaffold(
-        // 全屏 + 平台视图时，Scaffold 的 Material 底色也在视频之上，必须透明。
-        // 只限全屏：竖屏下 MiniScaffold 自己不画背景，全局透明会露出下层。
-        backgroundColor:
-            isFullScreen &&
-                (plPlayerController?.usePlatformViewRx.value ?? false)
-            ? Colors.transparent
-            : null,
         appBar: removeAppBar(isFullScreen)
             ? null
             : AppBar(
@@ -1973,12 +1959,6 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
   Widget get childWhenDisabledAlmostSquare => Obx(() {
     final isFullScreen = _layoutFullScreen;
     return SimpleScaffold(
-      // 全屏 + 平台视图时，Scaffold 的 Material 底色也在视频之上，必须透明。
-      // 只限全屏：竖屏下 MiniScaffold 自己不画背景，全局透明会露出下层。
-      backgroundColor:
-          isFullScreen && (plPlayerController?.usePlatformViewRx.value ?? false)
-          ? Colors.transparent
-          : null,
       appBar: removeAppBar(isFullScreen)
           ? null
           : AppBar(
@@ -2519,20 +2499,8 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
         child: Stack(
       clipBehavior: Clip.none,
       children: [
-        // 平台视图由系统合成在 Flutter 表面「之下」，这层黑底会把视频整个
-        // 盖住。Positioned.fill 必须留在 Obx 外面 —— Obx 不是 Positioned，
-        // 直接作 Stack 子节点会丢掉 fill 语义。
-        Positioned.fill(
-          child: Obx(
-            // 必须用 videoDetailController.plPlayerController（非空）读取。
-            // 用可空的 plPlayerController?. 时，controller 为 null 会短路，
-            // 这个 Obx 就一个 observable 都没读到，GetX 会抛
-            // "improper use of a GetX has been detected"。
-            () =>
-                videoDetailController.plPlayerController.usePlatformViewRx.value
-                ? const SizedBox.shrink()
-                : const ColoredBox(color: Colors.black, isAntiAlias: false),
-          ),
+        const Positioned.fill(
+          child: ColoredBox(color: Colors.black, isAntiAlias: false),
         ),
 
         plPlayer(width: width, height: height),

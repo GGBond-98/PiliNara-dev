@@ -36,7 +36,6 @@ import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
 import 'package:PiliPlus/plugin/pl_player/models/speed_lock_hint.dart';
 import 'package:PiliPlus/plugin/pl_player/models/video_fit_type.dart';
 import 'package:PiliPlus/plugin/pl_player/utils/fullscreen.dart';
-import 'package:PiliPlus/plugin/pl_player/utils/platform_video_backdrop.dart';
 import 'package:PiliPlus/plugin/pl_player/utils/player_rebuild_queue.dart';
 import 'package:PiliPlus/services/live_pip_overlay_service.dart';
 import 'package:PiliPlus/services/pip_overlay_service.dart';
@@ -97,16 +96,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 普通字段，替换不会触发任何 Obx 重建 —— 于是 UI 继续持有已 dispose 的旧
   /// controller（画面全黑、按钮卡死）。用下面两个 Rx 把替换广播出去。
   final RxInt playerGeneration = 0.obs;
-  final RxBool usePlatformViewRx = false.obs;
-
-  /// [usePlatformViewRx] 的唯一写入口，同时把平台视图状态同步给 ArkTS
-  /// （Index.ets 根 Stack 据此把黑边涂黑）。见 [PlatformVideoBackdrop]。
-  late final PlatformVideoBackdrop _platformVideoBackdrop =
-      PlatformVideoBackdrop(
-        rx: usePlatformViewRx,
-        enabled: _isOhos,
-        isAlive: () => _playerCount > 0,
-      );
 
   /// setDataSource 与渲染路径重建共用的串行队列，见 [PlayerRebuildQueue]。
   late final PlayerRebuildQueue _playerQueue = PlayerRebuildQueue(
@@ -600,8 +589,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 当前播放源的画质，用于判断是否为 HDR 片源。由 [setDataSource] 传入。
   VideoQuality? _hdrQuality;
 
-  static final bool _isOhos = Platform.operatingSystem == 'ohos';
-
   /// 面板**明确**不支持任何 HDR 格式时不进 HDR 路径：既不该发 HDR 信令，也不
   /// 该按 [_displayPeakNits] 去标定一块 SDR 屏。能力未知（查询失败 / 老版本
   /// 原生侧没有这个 method）时按支持处理，免得一次偶发失败就把 HDR 关掉。
@@ -615,20 +602,19 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// Flutter 纹理会把视频重采样进 Flutter 自己的 SDR 合成层，libmpv 挂在
   /// NativeWindow 上的色域与 HDR 元数据在这一步就丢了，系统因此不会进入 HDR
   /// 模式（没有峰值亮度，PQ 画面被按 sRGB 显示所以颜色也不对）。
-  /// 仅在**全屏**下使用平台视图。
   ///
   /// 平台视图由 RenderService 合成在 Flutter 表面「之下」，因此视频区域上方的
-  /// 每一层 Flutter 都必须透明。全屏时整屏都是播放器，做得到；内嵌时视频只是
-  /// 页面的一小块，要露出它就得在页面各层上按视频矩形抠一个透明洞
-  /// （BlendMode.clear），会波及顶栏 / 简介 / 评论等共用布局。
-  /// 所以内嵌时回退到纹理路径（几何正确但没有 HDR），全屏时才走平台视图。
+  /// 每一层 Flutter 都必须透明：全屏时整屏都是播放器；内嵌时页面 scaffold
+  /// 底色改透明，视频矩形以外的区域由页面内容自带的背景色兜底
+  /// （见 videoDetailPage 的 ColoredBox）。
+  ///
   /// 没有开关：关掉平台视图等于关掉 HDR（元数据会在 Flutter 纹理那一步丢光），
   /// 所以它不是一个用户能做的取舍，跟随「启用 HDR 视频」即可。
-  /// 画中画要排除：PiP 是另一块 XComponent（FloatingPlugin 会把 Flutter 引擎
-  /// 重新 attach 上去），平台视图不会跟过去，留在平台视图路径上的结果是 PiP
-  /// 窗口里一片空白。退回纹理路径至少画面还在，只是没有 HDR。
-  bool get usePlatformView =>
-      _isOhos && _isHDRPlayback && isFullScreen.value && !isPipMode;
+  /// 渲染路径与全屏状态无关：进出全屏不再重建播放器，避免 HDR 切换时的
+  /// 重新缓冲。画中画要排除：PiP 是另一块 XComponent（FloatingPlugin 会把
+  /// Flutter 引擎重新 attach 上去），平台视图不会跟过去，留在平台视图路径上
+  /// 的结果是 PiP 窗口里一片空白。退回纹理路径至少画面还在，只是没有 HDR。
+  bool get usePlatformView => OS.isHarmony && _isHDRPlayback && !isPipMode;
 
   /// 当前 VideoController 实际使用的渲染路径，用于判断是否需要重建播放器。
   bool _usesPlatformView = false;
@@ -645,13 +631,13 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 鸿蒙没有公开查询面板峰值亮度的接口（`display` 只给得出支持哪些 HDR
   /// 格式），所以由用户按屏幕参数填写，默认 1600（按 SLM-W32 标定）。
   /// 它随 VideoController 的配置一起下发，只在创建播放器时读取：改了设置从
-  /// 下一次重建播放器（重新打开视频，或 HDR 片源进出全屏）起生效。
+  /// 下一次重建播放器（重新打开视频、切换清晰度）起生效。
   ///
   /// 只在平台视图输出 HDR 时才会用上，规则见 [OhosHdrOutput.targetPeak]。
   static int get _displayPeakNits => Pref.hdrPeakNits;
 
   /// 传给 mpv 的 `--ohos-hdr-mode`，规则见 [OhosHdrOutput.mode]。
-  String? get ohosHdrMode => _isOhos
+  String? get ohosHdrMode => OS.isHarmony
       ? OhosHdrOutput.mode(
           quality: _hdrQuality,
           hdrPlayback: _isHDRPlayback,
@@ -662,7 +648,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       : null;
 
   /// 传给 mpv 的 `--target-peak`，规则见 [OhosHdrOutput.targetPeak]。
-  double? get ohosHdrTargetPeak => _isOhos
+  double? get ohosHdrTargetPeak => OS.isHarmony
       ? OhosHdrOutput.targetPeak(
           hdrPlayback: _isHDRPlayback,
           platformView: usePlatformView,
@@ -1505,16 +1491,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (player == null) {
       _usesPlatformView = usePlatformView;
       _appliedHdrMode = ohosHdrMode;
-      // 唯一写入口：顺带同步给 ArkTS，平台视图模式下根 Stack 才会是黑的。
-      // 不要改成 await，原因见 PlatformVideoBackdrop.update。
-      _platformVideoBackdrop.update(usePlatformView);
-      if (usePlatformView) {
-        // 平台视图下 Transform.flip 不起作用（视频不由 Flutter 绘制），翻转
-        // 开关也因此不显示。留着已置位的 flipX/flipY 会变成一个用户既看不到
-        // 效果、又没有入口关掉的状态，切进来时直接清掉。
-        flipX.value = false;
-        flipY.value = false;
-      }
       player = await _initPlayer();
       if (_playerCount == 0) {
         _removeListeners();
@@ -2723,10 +2699,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     } finally {
       _setFullScreen(status);
       _fsProcessing = false;
-      // 进出全屏会改变 usePlatformView，渲染路径在 VideoController 创建时就
-      // 固定了，因此必须重建播放器。放在 _fsProcessing 复位之后，避免重建
-      // 期间的状态回调被全屏流程吞掉。
-      unawaited(_syncRenderPath());
     }
   }
 
@@ -2735,7 +2707,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 与 setDataSource 排在同一条队列里，是否真要重建到了队头才判断，
   /// 见 [PlayerRebuildQueue]。
   Future<void> _syncRenderPath() async {
-    if (!_isOhos) return;
+    if (!OS.isHarmony) return;
     await _playerQueue.requestRebuild();
   }
 
@@ -2774,8 +2746,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       debugPrint(stackTrace.toString());
       debugPrint('_rebuildForRenderPath failed: $error');
     }
-    // 旧播放器多半已经 dispose，画面是黑的；下一次进出全屏会重试。
-    SmartDialog.showToast('切换播放画面失败，进出全屏可重试');
+    // 旧播放器多半已经 dispose，画面是黑的；切换清晰度会重建播放器并重试。
+    SmartDialog.showToast('切换播放画面失败，切换清晰度可重试');
   }
 
   /// 等待平台视口旋转为横屏（宽>高），带超时兜底。
@@ -3307,9 +3279,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     // （见 _dropDisposedInstance），避免把僵尸实例交给新页面。
     _disposeRequested = true;
     _playerCount = 0;
-    // 必须紧跟 _playerCount 清零、在第一个 await 之前：此后迟到的
-    // 渲染路径重建因 _playerCount == 0 不会再发 true，这里的 false 就是最终值。
-    _platformVideoBackdrop.reset();
     if (removeSafeArea) {
       showSystemBar();
     }

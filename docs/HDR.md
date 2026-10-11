@@ -1,6 +1,6 @@
 # 鸿蒙 HDR 输出
 
-全屏播放 HDR 片源（HDR10 / HDR Vivid / 杜比视界）时让系统真正进入 HDR 模式：面板拉起峰值亮度，按 BT.2020 PQ 显示。
+播放 HDR 片源（HDR10 / HDR Vivid / 杜比视界）时让系统真正进入 HDR 模式：面板拉起峰值亮度，按 BT.2020 PQ 显示。
 
 ## 为什么纹理做不到
 
@@ -10,12 +10,12 @@ libmpv 在鸿蒙上已经会把 NativeWindow 切到 BT.2020 PQ / HLG，并挂上
 
 | 播放场景 | 渲染路径 | 输出 |
 | --- | --- | --- |
-| 全屏，且片源是 HDR | XComponent 平台视图（Flutter 3.44 自带的 HCPP 合成），直接交给 RenderService | HDR |
-| 内嵌、画中画，或 SDR 片源 | 原来的 Flutter 纹理 | `--ohos-hdr-mode=no`，由 mpv 色调映射到 SDR |
+| 内嵌或全屏，且片源是 HDR | XComponent 平台视图（Flutter 3.44 自带的 HCPP 合成），直接交给 RenderService | HDR |
+| 画中画，或 SDR 片源 | 原来的 Flutter 纹理 | `--ohos-hdr-mode=no`，由 mpv 色调映射到 SDR |
 
-- 内嵌播放不走平台视图，是因为平台视图要求视频上方的每一层 Flutter 都透明，在内嵌布局里做不到。
+- 内嵌同样走平台视图：视频区之外由页面内容自己上底色（页面各层的 `backgroundColor` 与视频矩形内的黑底）。
 - 画中画是另一块 XComponent，平台视图跟不过去。
-- 渲染路径和 HDR 信令都在创建 Player 时确定，所以进出全屏、进出画中画都会重建播放器，并保留进度、播放状态和倍速。重建与 `setDataSource` 共用一条串行队列（`PlayerRebuildQueue`）。
+- 渲染路径和 HDR 信令都在创建 Player 时确定，所以进出画中画、切换清晰度会重建播放器，并保留进度、播放状态和倍速。重建与 `setDataSource` 共用一条串行队列（`PlayerRebuildQueue`）。渲染路径与全屏状态无关，进出全屏不重建。
 
 ## 依赖
 
@@ -62,11 +62,10 @@ libmpv 在鸿蒙上已经会把 NativeWindow 切到 BT.2020 PQ / HLG，并挂上
 hdc shell hidumper -s RenderService -a allInfo | grep -E 'Name \[[0-9]+Surface\]'
 ```
 
-全屏播放 HDR 片源时，`<viewId>Surface` 节点的 `NodeColorSpace` 应为 `7`（BT.2020）；Flutter 自身的 surface 为 `4`（sRGB）。
+播放 HDR 片源时，`<viewId>Surface` 节点的 `NodeColorSpace` 应为 `7`（BT.2020）；Flutter 自身的 surface 为 `4`（sRGB）。
 
 ## 已知限制
 
-- 只有全屏是 HDR。进出全屏会重建播放器，有一次短暂的重新缓冲。
-- 平台视图模式下「左右翻转 / 上下翻转」不可用，因为它们是 Flutter 侧的绘制变换，设置中会隐藏这两项。
+- 切换清晰度、进出画中画会重建播放器，有一次短暂的重新缓冲。
 - 2in1 上鼠标悬停（不按键）不会传给视频区域：引擎没有为平台视图提供 hover 分发。
 - media-kit 销毁仍挂着平台视图的播放器时，会打印 `[Player] has been disposed`，原生视图与视频输出也不会被释放（不影响播放），待在 media-kit 中修复。

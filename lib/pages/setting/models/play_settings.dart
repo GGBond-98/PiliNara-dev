@@ -386,13 +386,13 @@ List<SettingsModel> get playSettings => [
     setKey: SettingBoxKey.tempPlayerConf,
     defaultVal: false,
   ),
-  if (Platform.operatingSystem == 'ohos') ...[
+  if (OS.isHarmony) ...[
     const SwitchModel(
       title: '启用 HDR 视频',
       subtitle: '播放 HDR / HDR Vivid / 杜比视界片源时按 HDR 输出，触发峰值亮度',
       leading: Icon(Icons.settings_brightness_outlined),
       setKey: SettingBoxKey.enableHDR,
-      defaultVal: false,
+      defaultVal: true,
     ),
     NormalModel(
       title: 'HDR 峰值亮度',

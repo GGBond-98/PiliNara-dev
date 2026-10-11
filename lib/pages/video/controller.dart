@@ -399,7 +399,9 @@ class VideoDetailController extends GetxController
     );
     // playerInit() reads the quality from here; without it a downloaded HDR
     // file plays back as SDR because setDataSource(quality:) receives null.
-    currentVideoQa.value = firstVideo.quality;
+    if (OS.isHarmony) {
+      currentVideoQa.value = firstVideo.quality;
+    }
     if (watchProgress.get(cid.value.toString()) case final int progress?) {
       if (progress >= entry.totalTimeMilli - 400) {
         defaultST = Duration.zero;

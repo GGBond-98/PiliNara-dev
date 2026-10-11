@@ -1,6 +1,5 @@
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/models/play_status.dart';
-import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
 
 class PlayOrPauseButton extends StatefulWidget {
@@ -59,16 +58,14 @@ class PlayOrPauseButtonState extends State<PlayOrPauseButton>
         behavior: HitTestBehavior.opaque,
         onTap: widget.plPlayerController.onDoubleTapCenter,
         child: Center(
-          child: Obx(
-            () => AnimatedIcon(
-              semanticLabel: widget.plPlayerController.playerStatus.isPlaying
-                  ? '暂停'
-                  : '播放',
-              progress: controller,
-              icon: AnimatedIcons.play_pause,
-              color: Colors.white,
-              size: 20,
-            ),
+          child: AnimatedIcon(
+            semanticLabel: widget.plPlayerController.playerStatus.isPlaying
+                ? '暂停'
+                : '播放',
+            progress: controller,
+            icon: AnimatedIcons.play_pause,
+            color: Colors.white,
+            size: 20,
           ),
         ),
       ),
