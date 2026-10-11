@@ -95,10 +95,31 @@ class SimpleVideoState extends State<SimpleVideo> {
   Widget build(BuildContext context) {
     final ctr = widget.controller;
     return ListenableBuilder(
-      listenable: Listenable.merge([ctr.id, ctr.rect]),
+      // 监听 notifier：平台控制器在首帧后才就位，届时才可能切到平台视图路径。
+      listenable: Listenable.merge([ctr.id, ctr.rect, ctr.notifier]),
       builder: (context, _) {
         final id = ctr.id.value;
         final rect = ctr.rect.value;
+        // HDR：视频可能渲染进原生 XComponent 平台视图（media_kit 的
+        // usePlatformView），此时没有纹理 ID，必须挂 OhosPlatformVideo 才会
+        // 上屏，否则整个视频区一片黑。注意判据要落在 ctr.notifier.value 上：
+        // 它的声明类型是 PlatformVideoController?，是 OhosVideoController 的
+        // 超类，is 才能做类型提升（ctr 是 VideoController，与之无继承关系）。
+        final notifier = ctr.notifier.value;
+        if (notifier is OhosVideoController && notifier.usePlatformView) {
+          // 平台视图的几何由引擎从 layer tree 取，rect 只用来给 FittedBox
+          // 提供尺寸；mpv 还没上报 video-params 前先留空。
+          if (rect == null) {
+            return const SizedBox();
+          }
+          return SizedBox(
+            width: widget.aspectRatio == null
+                ? rect.width / _devicePixelRatio
+                : rect.height / _devicePixelRatio * widget.aspectRatio!,
+            height: rect.height / _devicePixelRatio,
+            child: OhosPlatformVideo(controller: notifier),
+          );
+        }
         if (id != null && rect != null && _visible) {
           return SizedBox(
             width: widget.aspectRatio == null

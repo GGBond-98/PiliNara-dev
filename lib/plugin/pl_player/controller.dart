@@ -603,10 +603,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// NativeWindow 上的色域与 HDR 元数据在这一步就丢了，系统因此不会进入 HDR
   /// 模式（没有峰值亮度，PQ 画面被按 sRGB 显示所以颜色也不对）。
   ///
-  /// 平台视图由 RenderService 合成在 Flutter 表面「之下」，因此视频区域上方的
-  /// 每一层 Flutter 都必须透明：全屏时整屏都是播放器；内嵌时页面 scaffold
-  /// 底色改透明，视频矩形以外的区域由页面内容自带的背景色兜底
-  /// （见 videoDetailPage 的 ColoredBox）。
+  /// 平台视图由 HCPP 合成在 Flutter 表面「之上」（视频被放进引擎自己的
+  /// surface 层，Flutter 覆盖在视频矩形上的内容会进 overlay 层），所以**下方**
+  /// 那些 Flutter 层不必为了显示视频而透明；视频矩形以外露出的区域由页面
+  /// 内容自带的背景色兜底（见 videoDetailPage 的 ColoredBox）。
   ///
   /// 没有开关：关掉平台视图等于关掉 HDR（元数据会在 Flutter 纹理那一步丢光），
   /// 所以它不是一个用户能做的取舍，跟随「启用 HDR 视频」即可。
@@ -614,7 +614,13 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 重新缓冲。画中画要排除：PiP 是另一块 XComponent（FloatingPlugin 会把
   /// Flutter 引擎重新 attach 上去），平台视图不会跟过去，留在平台视图路径上
   /// 的结果是 PiP 窗口里一片空白。退回纹理路径至少画面还在，只是没有 HDR。
-  bool get usePlatformView => OS.isHarmony && _isHDRPlayback && !isPipMode;
+  ///
+  /// 应用内小窗同理要排除，见 [notifyInAppPipChanged]。
+  bool get usePlatformView =>
+      OS.isHarmony &&
+      _isHDRPlayback &&
+      !isPipMode &&
+      !_isInInAppPip;
 
   /// 当前 VideoController 实际使用的渲染路径，用于判断是否需要重建播放器。
   bool _usesPlatformView = false;
@@ -2710,6 +2716,18 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (!OS.isHarmony) return;
     await _playerQueue.requestRebuild();
   }
+
+  /// 应用内小窗进出时由 [PipOverlayService] / [LivePipOverlayService] 调用，
+  /// 语义对齐系统画中画的 `onPipModeChanged`（见 [_startListeners]）。
+  ///
+  /// 应用内小窗里的画面走的是 `PipMiniVideoContent` 挂的 SimpleVideo，它
+  /// 只画纹理：平台视图的 XComponent 不会跟着搬进浮层，留在平台视图路径上
+  /// 小窗里就是空白/错位。而渲染路径在 VideoController 创建时就固定了，只能
+  /// 重建播放器。
+  ///
+  /// 是否真要重建由 [PlayerRebuildQueue] 到队头按 isStale 判断：若期间已经
+  /// setDataSource 过（那时 usePlatformView 已含小窗状态），这里就是空操作。
+  void notifyInAppPipChanged() => unawaited(_syncRenderPath());
 
   /// 按当前渲染路径重建播放器，保留进度、播放状态与倍速。
   /// 只由 [_playerQueue] 调用，失败向上抛，由它记下待重试。

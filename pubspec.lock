@@ -1354,7 +1354,7 @@ packages:
     description:
       path: media_kit_video
       ref: feat-secondary-subtitle
-      resolved-ref: b4fbe1ee6d994459ce84b34a649a89c40f5d9032
+      resolved-ref: d669b8d14c1dc8eadd27bbf4bea0bc5d8f75a32c
       url: "https://github.com/HelloZeroNick/media-kit.git"
     source: git
     version: "2.0.1"

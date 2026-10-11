@@ -1321,7 +1321,7 @@ abstract final class Pref {
 
   /// 播放 HDR 视频时覆盖播放器设置，启用 HDR 输出
   static bool get enableHDR =>
-      _setting.get(SettingBoxKey.enableHDR, defaultValue: false);
+      _setting.get(SettingBoxKey.enableHDR, defaultValue: true);
 
   /// HDR 色调映射用的面板峰值亮度（nit）。鸿蒙读不到面板峰值亮度，由用户填写
   static int get hdrPeakNits =>
