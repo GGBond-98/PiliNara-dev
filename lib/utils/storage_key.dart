@@ -251,7 +251,12 @@ abstract final class SettingBoxKey {
   static const String webdavUri = 'webdavUri',
       webdavUsername = 'webdavUsername',
       webdavPassword = 'webdavPassword',
-      webdavDirectory = 'webdavDirectory';
+      webdavDirectory = 'webdavDirectory',
+      onedriveDirectory = 'onedriveDirectory',
+      onedriveAccessToken = 'onedriveAccessToken',
+      onedriveRefreshToken = 'onedriveRefreshToken',
+      onedriveExpiresAt = 'onedriveExpiresAt',
+      syncMode = 'syncMode';
 
   static const String enableSponsorBlock = 'enableSponsorBlock',
       blockSettings = 'blockSettings',

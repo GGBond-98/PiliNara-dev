@@ -1020,6 +1020,21 @@ abstract final class Pref {
   static String get webdavDirectory =>
       _setting.get(SettingBoxKey.webdavDirectory, defaultValue: '/');
 
+  static String get onedriveDirectory =>
+      _setting.get(SettingBoxKey.onedriveDirectory, defaultValue: '');
+
+  static String get onedriveAccessToken =>
+      _setting.get(SettingBoxKey.onedriveAccessToken, defaultValue: '');
+
+  static String get onedriveRefreshToken =>
+      _setting.get(SettingBoxKey.onedriveRefreshToken, defaultValue: '');
+
+  static int get onedriveExpiresAt =>
+      _setting.get(SettingBoxKey.onedriveExpiresAt, defaultValue: 0);
+
+  static String get syncMode =>
+      _setting.get(SettingBoxKey.syncMode, defaultValue: 'webdav');
+
   static bool get showPgcTimeline =>
       _setting.get(SettingBoxKey.showPgcTimeline, defaultValue: true);
 
