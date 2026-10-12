@@ -1358,6 +1358,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       'video-sync': Pref.videoSync,
       if (Platform.isAndroid) 'ao': Pref.audioOutput,
       'stream-lavf-o': 'reconnect=1',
+      // volume-max 必须先于 volume 设置：mpv 默认 volume-max=130，
+      // 顺序颠倒会把 >130 的初始音量（应用内音量的增强档）静默截断
+      'volume-max': kMaxVolume.toString(),
       'volume': (PlatformUtils.isMobile
               ? (Pref.enableAppVolume ? volume.value * 100 : Pref.playerVolume)
               : volume.value * 100)
@@ -1674,6 +1677,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         if (completed) {
           playerStatus = .completed;
           _startWakeLockTimer();
+
+          // 播放结束展示控制栏（重播/选集入口），不调度自动隐藏；
+          // 自动连播/循环路径经 play() 会重新收起控制栏
+          showControls.value = true;
+          _timer?.cancel();
 
           for (final element in _statusListeners) {
             element(.completed);
