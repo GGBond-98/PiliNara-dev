@@ -1,5 +1,13 @@
 abstract final class Constants {
   static const appName = 'PiliNara';
+
+  /// 窄列阈值（逻辑像素）：宽度低于该值的分栏列（方形屏外屏分栏、近方形
+  /// 布局底部并排列等）启用紧凑布局（简介面板/评论项/Tab 栏/悬浮按钮）。
+  /// 实测 Pura X：外屏 980×980px@3x ≈ 327×327dp（竖屏视频分栏右列
+  /// ≈ 177dp）；内屏 1320×2120px@3x ≈ 440×707dp，为普通竖屏比例不分栏。
+  /// 取 300：覆盖外屏分栏列与近方形窄列，不影响常规手机（≥360dp）全宽。
+  static const double compactColumnWidth = 300;
+
   static const sourceCodeUrl = 'https://github.com/dev4harmony/PiliNara';
   static const upstreamCodeUrl = 'https://github.com/bggRGjQaUbCoE/PiliPlus';
   static const pilinaraCodeUrl = 'https://github.com/Starfallan/PiliNara';

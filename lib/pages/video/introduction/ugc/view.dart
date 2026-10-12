@@ -59,6 +59,7 @@ class UgcIntroPanel extends StatefulWidget {
     required this.onShowMemberPage,
     required this.isPortrait,
     required this.isHorizontal,
+    this.isCompact = false,
   });
   final String heroTag;
   final Function showAiBottomSheet;
@@ -67,6 +68,10 @@ class UgcIntroPanel extends StatefulWidget {
   final ValueChanged<int?> onShowMemberPage;
   final bool isPortrait;
   final bool isHorizontal;
+
+  /// 窄列（方形屏分栏右栏等 ~150dp 宽场景）紧凑布局：
+  /// 缩小头像行、信息行与操作栏改为自动换行
+  final bool isCompact;
 
   @override
   State<UgcIntroPanel> createState() => _UgcIntroPanelState();
@@ -97,6 +102,7 @@ class _UgcIntroPanelState extends State<UgcIntroPanel> {
   Widget build(BuildContext context) {
     final isPortrait = widget.isPortrait;
     final isHorizontal = !isPortrait && widget.isHorizontal;
+    final isCompact = widget.isCompact;
     return SliverPadding(
       padding: const .only(
         left: Style.safeSpace,
@@ -123,6 +129,7 @@ class _UgcIntroPanelState extends State<UgcIntroPanel> {
                       isPortrait,
                       isHorizontal,
                       videoDetail,
+                      compact: isCompact,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -131,7 +138,11 @@ class _UgcIntroPanelState extends State<UgcIntroPanel> {
                   Stack(
                     clipBehavior: .none,
                     children: [
-                      _buildInfo(videoDetail.stat, videoDetail.pubdate),
+                      _buildInfo(
+                        videoDetail.stat,
+                        videoDetail.pubdate,
+                        compact: isCompact,
+                      ),
                       if (introController.enableAi) _aiBtn,
                     ],
                   ),
@@ -182,6 +193,7 @@ class _UgcIntroPanelState extends State<UgcIntroPanel> {
                       isLoading,
                       introController,
                       videoDetail.stat,
+                      compact: isCompact,
                     ),
                   ],
                   // 合集
@@ -432,7 +444,7 @@ class _UgcIntroPanelState extends State<UgcIntroPanel> {
     return child();
   }
 
-  Widget followButton(BuildContext context) {
+  Widget followButton(BuildContext context, {bool compact = false}) {
     return Obx(
       () {
         int attr = introController.followStatus.value.attribute ?? 0;
@@ -457,7 +469,7 @@ class _UgcIntroPanelState extends State<UgcIntroPanel> {
               -10 => '特别关注',
               _ => ' 关注 ',
             },
-            style: const TextStyle(fontSize: 13),
+            style: TextStyle(fontSize: compact ? 12 : 13),
           ),
         );
       },
@@ -468,90 +480,103 @@ class _UgcIntroPanelState extends State<UgcIntroPanel> {
     BuildContext context,
     bool isLoading,
     UgcIntroController introController,
-    VideoStat? stat,
-  ) {
+    VideoStat? stat, {
+    bool compact = false,
+  }) {
+    final items = [
+      Obx(
+        () => ActionItem(
+          expand: !compact,
+          animation: introController.tripleAnimation,
+          icon: const Icon(FontAwesomeIcons.thumbsUp),
+          selectIcon: const Icon(FontAwesomeIcons.solidThumbsUp),
+          selectStatus: introController.hasLike.value,
+          semanticsLabel: '点赞',
+          text: !isLoading ? NumUtils.numFormat(stat!.like) : null,
+          onStartTriple: introController.onStartTriple,
+          onCancelTriple: introController.onCancelTriple,
+        ),
+      ),
+      Obx(
+        () => ActionItem(
+          expand: !compact,
+          icon: const Icon(FontAwesomeIcons.thumbsDown),
+          selectIcon: const Icon(FontAwesomeIcons.solidThumbsDown),
+          onTap: () => introController.handleAction(
+            introController.actionDislikeVideo,
+          ),
+          selectStatus: introController.hasDislike.value,
+          semanticsLabel: '点踩',
+          text: "点踩",
+        ),
+      ),
+      Obx(
+        () => ActionItem(
+          expand: !compact,
+          animation: introController.tripleAnimation,
+          icon: const Icon(FontAwesomeIcons.b),
+          selectIcon: const Icon(FontAwesomeIcons.b),
+          onTap: introController.actionCoinVideo,
+          selectStatus: introController.hasCoin,
+          semanticsLabel: '投币',
+          text: !isLoading ? NumUtils.numFormat(stat!.coin) : null,
+        ),
+      ),
+      Obx(
+        () => ActionItem(
+          expand: !compact,
+          animation: introController.tripleAnimation,
+          icon: const Icon(FontAwesomeIcons.star),
+          selectIcon: const Icon(FontAwesomeIcons.solidStar),
+          onTap: () => introController.showFavBottomSheet(context),
+          onLongPress: () => introController.showFavBottomSheet(
+            context,
+            isLongPress: true,
+          ),
+          selectStatus: introController.hasFav.value,
+          semanticsLabel: '收藏',
+          text: !isLoading ? NumUtils.numFormat(stat!.favorite) : null,
+        ),
+      ),
+      Obx(
+        () => ActionItem(
+          expand: !compact,
+          icon: const Icon(FontAwesomeIcons.clock),
+          selectIcon: const Icon(FontAwesomeIcons.solidClock),
+          onTap: () =>
+              introController.handleAction(introController.viewLater),
+          selectStatus: introController.hasLater.value,
+          semanticsLabel: '再看',
+          text: '再看',
+        ),
+      ),
+      ActionItem(
+        expand: !compact,
+        icon: const Icon(FontAwesomeIcons.shareFromSquare),
+        onTap: () => introController.actionShareVideo(context),
+        selectStatus: false,
+        semanticsLabel: '分享',
+        text: !isLoading ? NumUtils.numFormat(stat!.share!) : null,
+      ),
+      if (Pref.enableAiChat)
+        ActionItem(
+          expand: !compact,
+          icon: const Icon(Icons.auto_awesome),
+          onTap: widget.showAiChatBottomSheet,
+          selectStatus: false,
+          semanticsLabel: 'AI分析',
+          text: 'AI',
+        ),
+    ];
+    if (compact) {
+      // 窄列：等宽 Expanded 会把每项压到 ~20dp，改为按内容宽度换行
+      return Wrap(spacing: 12, runSpacing: 4, children: items);
+    }
     return SizedBox(
       height: 48,
       child: Row(
         crossAxisAlignment: .start,
-        children: [
-          Obx(
-            () => ActionItem(
-              animation: introController.tripleAnimation,
-              icon: const Icon(FontAwesomeIcons.thumbsUp),
-              selectIcon: const Icon(FontAwesomeIcons.solidThumbsUp),
-              selectStatus: introController.hasLike.value,
-              semanticsLabel: '点赞',
-              text: !isLoading ? NumUtils.numFormat(stat!.like) : null,
-              onStartTriple: introController.onStartTriple,
-              onCancelTriple: introController.onCancelTriple,
-            ),
-          ),
-          Obx(
-            () => ActionItem(
-              icon: const Icon(FontAwesomeIcons.thumbsDown),
-              selectIcon: const Icon(FontAwesomeIcons.solidThumbsDown),
-              onTap: () => introController.handleAction(
-                introController.actionDislikeVideo,
-              ),
-              selectStatus: introController.hasDislike.value,
-              semanticsLabel: '点踩',
-              text: "点踩",
-            ),
-          ),
-          Obx(
-            () => ActionItem(
-              animation: introController.tripleAnimation,
-              icon: const Icon(FontAwesomeIcons.b),
-              selectIcon: const Icon(FontAwesomeIcons.b),
-              onTap: introController.actionCoinVideo,
-              selectStatus: introController.hasCoin,
-              semanticsLabel: '投币',
-              text: !isLoading ? NumUtils.numFormat(stat!.coin) : null,
-            ),
-          ),
-          Obx(
-            () => ActionItem(
-              animation: introController.tripleAnimation,
-              icon: const Icon(FontAwesomeIcons.star),
-              selectIcon: const Icon(FontAwesomeIcons.solidStar),
-              onTap: () => introController.showFavBottomSheet(context),
-              onLongPress: () => introController.showFavBottomSheet(
-                context,
-                isLongPress: true,
-              ),
-              selectStatus: introController.hasFav.value,
-              semanticsLabel: '收藏',
-              text: !isLoading ? NumUtils.numFormat(stat!.favorite) : null,
-            ),
-          ),
-          Obx(
-            () => ActionItem(
-              icon: const Icon(FontAwesomeIcons.clock),
-              selectIcon: const Icon(FontAwesomeIcons.solidClock),
-              onTap: () =>
-                  introController.handleAction(introController.viewLater),
-              selectStatus: introController.hasLater.value,
-              semanticsLabel: '再看',
-              text: '再看',
-            ),
-          ),
-          ActionItem(
-            icon: const Icon(FontAwesomeIcons.shareFromSquare),
-            onTap: () => introController.actionShareVideo(context),
-            selectStatus: false,
-            semanticsLabel: '分享',
-            text: !isLoading ? NumUtils.numFormat(stat!.share!) : null,
-          ),
-          if (Pref.enableAiChat)
-            ActionItem(
-              icon: const Icon(Icons.auto_awesome),
-              onTap: widget.showAiChatBottomSheet,
-              selectStatus: false,
-              semanticsLabel: 'AI分析',
-              text: 'AI',
-            ),
-        ],
+        children: items,
       ),
     );
   }
@@ -715,8 +740,9 @@ class _UgcIntroPanelState extends State<UgcIntroPanel> {
     bool isLoading,
     bool isPortrait,
     bool isHorizontal,
-    VideoDetailData videoDetail,
-  ) {
+    VideoDetailData videoDetail, {
+    bool compact = false,
+  }) {
     final mid = videoDetail.owner?.mid;
     return Row(
       children: [
@@ -751,10 +777,11 @@ class _UgcIntroPanelState extends State<UgcIntroPanel> {
                     }
                   }
                 },
+                compact: compact,
               ),
             ),
           ),
-          followButton(context),
+          followButton(context, compact: compact),
         ],
         if (isHorizontal) ...[
           const SizedBox(width: 10),
@@ -897,8 +924,9 @@ class _UgcIntroPanelState extends State<UgcIntroPanel> {
   }
 
   Widget _buildAvatar(
-    VoidCallback onPushMember,
-  ) => GestureDetector(
+    VoidCallback onPushMember, {
+    bool compact = false,
+  }) => GestureDetector(
     onTap: onPushMember,
     behavior: .opaque,
     onSecondaryTap:
@@ -913,19 +941,19 @@ class _UgcIntroPanelState extends State<UgcIntroPanel> {
         final isVip = (userStat.card?.vip?.status ?? 0) > 0;
         final ownerMid = int.tryParse(userStat.card?.mid ?? '');
         return Row(
-          spacing: 10,
+          spacing: compact ? 6 : 10,
           mainAxisSize: .min,
           children: [
             PendantAvatar(
               userStat.card?.face,
-              size: 35,
-              badgeSize: 14,
+              size: compact ? 30 : 35,
+              badgeSize: compact ? 12 : 14,
               vipStatus: userStat.card?.vip?.status,
               officialType: userStat.card?.official?.type,
             ),
             Flexible(
               child: Column(
-                crossAxisAlignment: .start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text.rich(
                     maxLines: 1,
@@ -938,7 +966,7 @@ class _UgcIntroPanelState extends State<UgcIntroPanel> {
                             userStat.card?.name ?? '',
                           ),
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: compact ? 12 : 13,
                             color: isVip && userStat.card?.vip?.type == 2
                                 ? colorScheme.vipColor
                                 : null,
@@ -949,7 +977,7 @@ class _UgcIntroPanelState extends State<UgcIntroPanel> {
                           TextSpan(
                             text: '（${remarkOf(ownerMid)}）',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: compact ? 11 : 12,
                               color: colorScheme.primary,
                             ),
                           ),
@@ -957,8 +985,15 @@ class _UgcIntroPanelState extends State<UgcIntroPanel> {
                     ),
                   ),
                   Text(
-                    '${NumUtils.numFormat(userStat.follower)}粉丝    ${'${NumUtils.numFormat(userStat.archiveCount)}视频'}',
-                    style: TextStyle(fontSize: 12, color: colorScheme.outline),
+                    compact
+                        ? '${NumUtils.numFormat(userStat.follower)}粉丝'
+                        : '${NumUtils.numFormat(userStat.follower)}粉丝    ${'${NumUtils.numFormat(userStat.archiveCount)}视频'}',
+                    maxLines: 1,
+                    overflow: .ellipsis,
+                    style: TextStyle(
+                      fontSize: compact ? 10 : 12,
+                      color: colorScheme.outline,
+                    ),
                   ),
                 ],
               ),
@@ -969,43 +1004,45 @@ class _UgcIntroPanelState extends State<UgcIntroPanel> {
     ),
   );
 
-  Widget _buildInfo(VideoStat? stat, int? pubdate) {
-    return Row(
-      spacing: 10,
-      children: [
-        StatWidget(
-          type: .play,
-          value: stat?.view,
+  Widget _buildInfo(VideoStat? stat, int? pubdate, {bool compact = false}) {
+    final children = [
+      StatWidget(
+        type: .play,
+        value: stat?.view,
+        color: colorScheme.outline,
+      ),
+      StatWidget(
+        type: .danmaku,
+        value: stat?.danmaku,
+        color: colorScheme.outline,
+      ),
+      Text(
+        DateFormatUtils.format(pubdate),
+        style: TextStyle(
+          fontSize: 12,
           color: colorScheme.outline,
         ),
-        StatWidget(
-          type: .danmaku,
-          value: stat?.danmaku,
+      ),
+      if (MineController.anonymity.value)
+        Icon(
+          MdiIcons.incognito,
+          size: 15,
           color: colorScheme.outline,
+          semanticLabel: '无痕',
         ),
-        Text(
-          DateFormatUtils.format(pubdate),
-          style: TextStyle(
-            fontSize: 12,
-            color: colorScheme.outline,
+      if (introController.isShowOnlineTotal)
+        Obx(
+          () => Text(
+            '${introController.total.value}人在看',
+            style: TextStyle(fontSize: 12, color: colorScheme.outline),
           ),
         ),
-        if (MineController.anonymity.value)
-          Icon(
-            MdiIcons.incognito,
-            size: 15,
-            color: colorScheme.outline,
-            semanticLabel: '无痕',
-          ),
-        if (introController.isShowOnlineTotal)
-          Obx(
-            () => Text(
-              '${introController.total.value}人在看',
-              style: TextStyle(fontSize: 12, color: colorScheme.outline),
-            ),
-          ),
-      ],
-    );
+    ];
+    // 窄列下播放数/弹幕数/日期一行放不下，改为自动换行
+    if (compact) {
+      return Wrap(spacing: 6, runSpacing: 2, children: children);
+    }
+    return Row(spacing: 10, children: children);
   }
 
   Widget get _aiBtn => Positioned(

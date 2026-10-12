@@ -120,32 +120,40 @@ class ReplyItemGrpc extends StatelessWidget {
       },
     );
 
-    Widget child = Padding(
-      padding: const .fromLTRB(12, 14, 8, 5),
-      child: _buildContent(context, colorScheme),
-    );
-    if (needDivider) {
-      child = Column(
-        mainAxisSize: .min,
-        children: [
-          child,
-          Divider(
-            indent: 55,
-            endIndent: 15,
-            height: 0.3,
-            color: colorScheme.outline.withValues(alpha: 0.08),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 窄列（方形屏分栏评论栏等）：评论内容不再缩进到头像右侧，
+        // 改为在头像下方通栏显示，沿用 replyLevel == 0 的布局语义
+        final compact =
+            constraints.maxWidth < Constants.compactColumnWidth;
+        Widget child = Padding(
+          padding: const .fromLTRB(12, 14, 8, 5),
+          child: _buildContent(context, colorScheme, compact: compact),
+        );
+        if (needDivider) {
+          child = Column(
+            mainAxisSize: .min,
+            children: [
+              child,
+              Divider(
+                indent: compact ? 15 : 55,
+                endIndent: 15,
+                height: 0.3,
+                color: colorScheme.outline.withValues(alpha: 0.08),
+              ),
+            ],
+          );
+        }
+        return Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: () => replyReply?.call(replyItem, null),
+            onLongPress: showMore,
+            onSecondaryTap: PlatformUtils.isMobile ? null : showMore,
+            child: child,
           ),
-        ],
-      );
-    }
-    return Material(
-      type: MaterialType.transparency,
-      child: InkWell(
-        onTap: () => replyReply?.call(replyItem, null),
-        onLongPress: showMore,
-        onSecondaryTap: PlatformUtils.isMobile ? null : showMore,
-        child: child,
-      ),
+        );
+      },
     );
   }
 
@@ -334,9 +342,16 @@ class ReplyItemGrpc extends StatelessWidget {
     );
   }
 
-  Widget _buildContent(BuildContext context, ColorScheme colorScheme) {
+  Widget _buildContent(
+    BuildContext context,
+    ColorScheme colorScheme, {
+    bool compact = false,
+  }) {
     final replyControl = replyItem.replyControl;
-    final padding = EdgeInsets.only(left: replyLevel == 0 ? 6 : 45, right: 6);
+    final padding = EdgeInsets.only(
+      left: replyLevel == 0 || compact ? 6 : 45,
+      right: 6,
+    );
     return Column(
       mainAxisSize: .min,
       crossAxisAlignment: .start,
@@ -402,12 +417,17 @@ class ReplyItemGrpc extends StatelessWidget {
         ],
         if (replyLevel != 0) ...[
           const SizedBox(height: 4),
-          buttonAction(context, colorScheme, replyControl),
+          buttonAction(context, colorScheme, replyControl, compact: compact),
         ],
         if (replyLevel == 1 && replyItem.count > Int64.ZERO) ...[
           Padding(
             padding: const EdgeInsets.only(top: 5, bottom: 12),
-            child: replyItemRow(context, colorScheme, replyItem.replies),
+            child: replyItemRow(
+              context,
+              colorScheme,
+              replyItem.replies,
+              compact: compact,
+            ),
           ),
         ],
       ],
@@ -483,8 +503,9 @@ class ReplyItemGrpc extends StatelessWidget {
   Widget buttonAction(
     BuildContext context,
     ColorScheme colorScheme,
-    ReplyControl replyControl,
-  ) {
+    ReplyControl replyControl, {
+    bool compact = false,
+  }) {
     final textStyle = TextStyle(
       height: 1,
       fontSize: 12,
@@ -519,7 +540,7 @@ class ReplyItemGrpc extends StatelessWidget {
     }
     return Row(
       children: [
-        const SizedBox(width: 36),
+        SizedBox(width: compact ? 6 : 36),
         SizedBox(
           height: 32,
           child: TextButton(
@@ -573,12 +594,13 @@ class ReplyItemGrpc extends StatelessWidget {
   Widget replyItemRow(
     BuildContext context,
     ColorScheme colorScheme,
-    List<ReplyInfo> replies,
-  ) {
+    List<ReplyInfo> replies, {
+    bool compact = false,
+  }) {
     final extraRow = replies.length < replyItem.count.toInt();
     late final length = replies.length + (extraRow ? 1 : 0);
     return Padding(
-      padding: const EdgeInsets.only(left: 42, right: 4),
+      padding: EdgeInsets.only(left: compact ? 6 : 42, right: 4),
       child: Material(
         color: colorScheme.onInverseSurface,
         borderRadius: const BorderRadius.all(Radius.circular(6)),
