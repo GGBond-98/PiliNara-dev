@@ -54,7 +54,6 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
-import 'package:os_type/os_type.dart';
 import 'package:material_ui/material_ui.dart' hide RefreshIndicator;
 
 List<SettingsModel> get extraSettings => [
@@ -334,12 +333,12 @@ List<SettingsModel> get extraSettings => [
         '当前:「${Pref.superResolutionType.label}」\n默认设置对番剧生效, 其他视频默认关闭\n超分辨率需要启用硬件解码, 若启用硬件解码后仍然不生效, 尝试切换硬件解码器为 auto-copy',
     onTap: _showSuperResolutionDialog,
   ),
-  SwitchModel(
+  const SwitchModel(
     title: '提前初始化播放器',
     subtitle: '相对减少手动播放加载时间',
-    leading: const Icon(Icons.play_circle_outlined),
+    leading: Icon(Icons.play_circle_outlined),
     setKey: SettingBoxKey.preInitPlayer,
-    defaultVal: OS.isHarmony,
+    defaultVal: false,
   ),
   const SwitchModel(
     title: '首页切换页面动画',

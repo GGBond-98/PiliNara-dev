@@ -13,15 +13,13 @@ class AudioSessionHandler {
   Future<bool> setActive(bool active) {
     return session.setActive(
       active,
-      // 鸿蒙：PAUSE_OTHERS 仅在本次申请焦点时生效，之后其他应用申请焦点
-      // 遵循对方模式，后台应用（画中画）的音频流会被默认策略强停且 mpv
-      // 感知不到。MIX_WITH_OTHERS 双向生效，其他应用起流也不会打断本应用，
-      // 开启"同时播放"或处于画中画时使用。
+      // 鸿蒙：会话并发模式是「与其他应用同时播放」的唯一控制点（iOS 用
+      // AVAudioSession 类别、Android 用焦点协商）。开启混音或有存活实例处于
+      // 画中画（含小窗并行播放）时请求 concurrencyMixWithOthers，否则不传、
+      // 回落到插件默认的 concurrencyPauseOthers，非鸿蒙平台行为与上游一致。
       ohosAudioConcurrencyMode:
           OS.isHarmony &&
-              active &&
-              (Pref.mixWithOthers ||
-                  PlPlayerController.instance?.isPipMode == true)
+              (Pref.mixWithOthers || PlPlayerController.anyPipInstance)
           ? AudioConcurrencyMode.concurrencyMixWithOthers
           : null,
     );

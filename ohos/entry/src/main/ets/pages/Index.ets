@@ -858,7 +858,12 @@ struct Index {
 
   build() {
     Stack({ alignContent: Alignment.Top }) {
-      FlutterPage({ viewId: this.viewId, xComponentRenderFit: RenderFit.TOP })
+      // xComponentColor 置透明：HDR 平台视图由 RenderService 合成在
+      // FlutterSurface 之下，不能被 XComponent 的黑底盖住。
+      // 注意上游的 RenderFit.TOP 已经让 FlutterSurface 的黑底判断恒假
+      // （见 FlutterPage.ets 的 backgroundColor 三元），这里是双保险：
+      // 一旦 renderFit 改回 RESIZE_FILL，仍然不会黑屏。
+      FlutterPage({ viewId: this.viewId, xComponentRenderFit: RenderFit.TOP, xComponentColor: Color.Transparent })
         .width('100%')
         .height('100%')
         .align(Alignment.Top)

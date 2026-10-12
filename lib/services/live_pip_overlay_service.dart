@@ -124,6 +124,9 @@ class LivePipOverlayService {
     }
 
     _isInPipMode = true;
+    // 小窗走纹理，HDR 的平台视图不能跟过来：渲染路径在 VideoController
+    // 创建时固定，只能重建播放器。
+    plPlayerController.notifyInAppPipChanged();
     // 收起动画:从页面播放器矩形缩至小窗;sourceRect 为空时直接以活跃态出现
     transition.beginEnter(sourceRect: sourceRect);
     isVertical = plPlayerController.isVertical;
@@ -204,6 +207,10 @@ class LivePipOverlayService {
 
     final closeCallback = callOnClose ? _onCloseCallback : null;
     final playerController = _savedPlayerController;
+    // 退出小窗回到页面：渲染路径要切回平台视图（HDR）。是否真要重建由队列
+    // 按 isStale 判断；若随后马上 dispose，_rebuildForRenderPath 会在
+    // _playerCount == 0 处提前返回，不会多出一个孤儿播放器。
+    playerController?.notifyInAppPipChanged();
 
     _onCloseCallback = null;
     _onReturnCallback = null;
