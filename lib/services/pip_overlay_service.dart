@@ -88,6 +88,11 @@ class PipOverlayService {
   // 保存控制器引用，防止被 GC
   static dynamic _savedController;
   static PlPlayerController? _savedPlayerController;
+
+  /// 小窗当前持有的播放器实例（页面据此判断"小窗里是不是自己的视频"，
+  /// 以及单例摘挂时识别占用者）
+  static PlPlayerController? get savedPlayerController =>
+      _savedPlayerController;
   static String? _savedVideoContextKey;
   static String? get savedVideoContextKey => _savedVideoContextKey;
   static final Map<String, dynamic> _savedControllers = {};

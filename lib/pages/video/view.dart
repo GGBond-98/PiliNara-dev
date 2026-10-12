@@ -4,6 +4,7 @@ import 'dart:math';
 import 'dart:ui';
 
 import 'package:PiliPlus/common/assets.dart';
+import 'package:PiliPlus/common/constants.dart';
 import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/custom_icon.dart';
 import 'package:PiliPlus/common/widgets/flutter/pop_scope.dart';
@@ -112,10 +113,6 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
 
   // 标志位：是否正在进入 PiP 模式（用于防止 dispose/didPushNext 时清理播放器状态）
   bool _isEnteringPipMode = false;
-
-  // 标志位：_onPopInvokedWithResult 触发了 didPop=true 但 PiP 被其他视频/直播抢占，
-  // 需要在 didPopNext 关闭其他 PiP 后重试启动
-  bool _pipRetryPending = false;
 
   // 标志位：三点菜单「应用内画中画」发起的 pop，一次性；由 _onPopInvokedWithResult 消费，
   // 让本次收起绕过设置开关与嵌套栈判断
@@ -248,6 +245,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
   Worker? _pipModeWorker;
   Worker? _decorDarkWorker;
   Worker? _decorFullScreenWorker;
+  Worker? _decorVerticalWorker;
 
   /// 自由多窗装饰栏按钮配色是否由本页驱动。页面被覆盖（didPushNext）或
   /// 销毁后置 false：覆盖期间的滚动/主题变化不应再把按钮抢回来。
@@ -262,6 +260,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
   /// - 横屏布局：右上角是 MiniScaffold（surface），只有顶部那条黑色 AppBar
   ///   有高度（窗口压住状态栏，padding.top > 0）时才盖得住按钮所在的一带
   /// - 近方形布局：顶部整条都是播放器，恒为黑
+  /// - 方形屏竖屏视频分栏：同横屏布局，黑色 AppBar 有高度时盖住按钮一带
   bool get _topBarIsDark {
     // 全屏：整窗都是播放器
     if (isFullScreen) return true;
@@ -269,7 +268,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     if (_usesPortraitLayout) {
       return videoDetailController.scrollRatio.value < 0.5;
     }
-    if (_usesLandscapeLayout) {
+    if (_usesLandscapeLayout || _usesSquareSplitLayout) {
       return padding.top > 0;
     }
     return true;
@@ -424,6 +423,11 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
         videoDetailController.$reopenLifeCycle(); // 重置 isClosed
         Get.put(savedController, tag: heroTag);
 
+        // 小窗归位页接管前台：其播放器实例重新挂回单例槽位（并行播放
+        // 期间槽位可能已让给其他页面的实例；被顶替的实例其页面仍持有
+        // 引用不受影响，销毁时按自身实例回收）
+        videoDetailController.plPlayerController.attachAsSingleton();
+
         // 点击展开（归位动画中）：小窗仍在飞向本页，非销毁式 stopPip 推迟到
         // 握手完成由协调器触发 _finalizeRestore 执行；本页播放器先透明占位。
         // 其余场景（如从听视频页带 fromPip 返回）维持旧的瞬时关闭
@@ -465,32 +469,10 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
         videoDetailController = Get.put(VideoDetailController(), tag: heroTag);
       }
     } else {
-      // 非 PiP 返回，正常流程（包括原页面还留在栈中或由于某些原因被销毁重构）
-      if (PipOverlayService.isInPipMode) {
-        // 关闭小窗，释放旧页面 owner（清媒体会话、dispose 播放器，
-        // 从列表点击视频应该停止旧的播放）
-        final savedController =
-            PipOverlayService.getSavedController<VideoDetailController>();
-        final fromVideoPage =
-            VideoStackManager.getCount() > 1 ||
-            PipOverlayService.isVideoLikeRoute(Get.previousRoute);
-        final savedWasPlaying =
-            fromVideoPage &&
-            (savedController?.plPlayerController.playerStatus.isPlaying ??
-                false);
-        if (savedWasPlaying) {
-          savedController!.playerStatus = PlayerStatus.playing;
-        }
-        PipOverlayService.stopPip(
-          callOnClose: false,
-          immediate: true,
-          targetContextKey: targetContextKey,
-          releaseSavedOwner: true,
-          // 旧视频页仍在栈内（链式进入新视频）时只暂停不 dispose，
-          // 保留播放器实例与计数供返回时恢复
-          disposeSavedOwnerPlayer: !fromVideoPage,
-        );
-      }
+      // 非 PiP 返回，正常流程（包括原页面还留在栈中或由于某些原因被销毁重构）。
+      // 小窗并行播放：打开新视频不再抢占/关闭小窗，旧视频在小窗中继续播放；
+      // VideoDetailController 构造函数里的 PlPlayerController.getInstance()
+      // 会自动把小窗实例从单例槽位摘下，为新页面创建全新播放器实例
       videoDetailController = Get.put(VideoDetailController(), tag: heroTag);
     }
 
@@ -509,6 +491,12 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     );
     _decorFullScreenWorker = ever(
       videoDetailController.plPlayerController.isFullScreen,
+      (_) => _syncDecorDark(),
+    );
+    // 竖屏视频判定翻转时会切换布局（如方形屏切到「左视频 + 右侧栏」分栏），
+    // 顶栏底色随之改变（渐变顶栏 ↔ 黑色播放器），也要同步装饰栏按钮
+    _decorVerticalWorker = ever(
+      videoDetailController.isVertical,
       (_) => _syncDecorDark(),
     );
     // 画中画状态翻转时强制重建：PiP 结束时若窗口尺寸恰好没变（如画中画
@@ -929,17 +917,19 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
   @override
   void dispose() {
     VideoStackManager.decrement(); // 减少视频页面层级追踪
-    final isInAppPip = PipOverlayService.isInPipMode;
-    // 如果 _pipRetryPending=true 但用户没有继续 pop（_onPopInvokedWithResult 未触发），
-    // 说明用户通过其他方式离开（点导航栏、Get.offAll 等），需要主动暂停播放器。
-    if (_pipRetryPending && !isInAppPip && !_isEnteringPipMode) {
-      plPlayerController?.pause();
-      _pipRetryPending = false;
-    }
+    // 并行播放期间小窗里可能是别的页面的播放器（小窗是 A、本页是 B）：
+    // 只有小窗持有"本页的"实例时，本页才算进入小窗模式
+    final bool myPlayerInPip =
+        PipOverlayService.isInPipMode &&
+        identical(
+          PipOverlayService.savedPlayerController,
+          videoDetailController.plPlayerController,
+        );
 
     _pipModeWorker?.dispose();
     _decorDarkWorker?.dispose();
     _decorFullScreenWorker?.dispose();
+    _decorVerticalWorker?.dispose();
     _releaseDecorDark();
     plPlayerController
       ?..removeStatusLister(playerListener)
@@ -962,9 +952,11 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
       PlPlayerController.setPlayCallBack(null);
     }
 
-    if (!videoDetailController.isFileSource &&
-        !isInAppPip &&
-        !_isEnteringPipMode) {
+    if (
+        !videoDetailController.isFileSource &&
+        !myPlayerInPip &&
+        !_isEnteringPipMode
+    ) {
       if (videoDetailController.isUgc) {
         ugcIntroController
           ..cancelTimer()
@@ -979,7 +971,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     }
 
     if (!videoDetailController.plPlayerController.isCloseAll) {
-      if (isInAppPip || _isEnteringPipMode) {
+      if (myPlayerInPip || _isEnteringPipMode) {
         videoDetailController.makeHeartBeat();
       } else {
         videoPlayerServiceHandler?.onVideoDetailDispose(heroTag);
@@ -1023,8 +1015,17 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
         _shouldStartInAppPip();
 
     // 确定是否需要释放/暂停资源
+    // 并行播放期间小窗里可能是别的页面的播放器（小窗是 A、本页是 B）：
+    // 只有"本页的"实例在小窗中才保留本页资源；小窗是别人的时本页照常暂停，
+    // 否则会同时出两路声音（willStartPip 也被 isInPipMode 拒绝）
+    final bool myPlayerInPip =
+        PipOverlayService.isInPipMode &&
+        identical(
+          PipOverlayService.savedPlayerController,
+          videoDetailController.plPlayerController,
+        );
     final bool shouldKeepAlive =
-        _isEnteringPipMode || PipOverlayService.isInPipMode || willStartPip;
+        _isEnteringPipMode || myPlayerInPip || willStartPip;
 
     introController.cancelTimer();
 
@@ -1104,6 +1105,9 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
         _logSponsorBlock(
           'Returning to video page with matching active PiP, closing PiP overlay',
         );
+        // 本页回到前台：其播放器实例重新挂回单例槽位（并行播放期间槽位
+        // 可能被下方页面的实例占用或已让渡；挂回后全局静态入口指向本页）
+        plPlayerController?.attachAsSingleton();
         // 小窗里的实际状态是用户最新的播放意图（可能在小窗中手动暂停过），
         // 先于关闭小窗记录，交由 didPopNext 末尾统一对账
         videoDetailController.playerStatus =
@@ -1126,17 +1130,15 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
           plPlayerController?.controls = false;
         }
       } else {
-        // 小窗里播放的是其他视频，返回到新的视频页面时必须关闭小窗，否则会同时播放两个视频
+        // 并行播放：小窗里是其他视频时不再关闭它，两路各自独立播放、
+        // 互不影响；本页在末尾按需恢复自己的播放器
         _logSponsorBlock(
-          'Returning to video page but PiP has different controller, closing PiP',
+          'Returning to video page while PiP plays another video, keeping PiP',
         );
-        PipOverlayService.stopPip(callOnClose: true, immediate: true);
         // 当前页面之前可能曾尝试进入小窗（didPushNext 设置了 _isEnteringPipMode = true），
         // 但被其他视频抢占。需要重置该标志，否则 dispose 会跳过播放器清理，
         // 且 PopScope 不在 widget tree 中导致后续返回无法触发新的小窗
         _resetEnteringPipFlags();
-        // 标记需要重试 PiP：关了别人的 PiP，恢复播放器后应尝试启动自己的 PiP
-        _pipRetryPending = true;
       }
     } else if (_isEnteringPipMode || videoDetailController.isEnteringPip) {
       _resetEnteringPipFlags();
@@ -1273,11 +1275,6 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
 
     // 无论进入哪个分支，最后都刷新一下 UI
     if (mounted) setState(() {});
-
-    // 不在此处重试 _startInAppPipIfNeeded。
-    // didPopNext 是"返回到本页面"的回调，无法预知用户接下来是停留还是继续返回。
-    // 若立即重试，会在用户停在本页时把视频错误地送入 PiP。
-    // _pipRetryPending 留待 _onPopInvokedWithResult 消费——只有用户真正继续 pop 时才重试。
   }
 
   @override
@@ -1526,7 +1523,13 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
                         hitTestBehavior: .translucent,
                         controller: videoDetailController.tabCtr,
                         children: [
-                          videoIntro(isHorizontal: false, needCtr: false),
+                          videoIntro(
+                            isHorizontal: false,
+                            needCtr: false,
+                            // 小尺寸近方形窗口（外屏）下方内容区很矮，
+                            // 简介面板紧凑化
+                            isCompact: _isSmallNearSquareWindow,
+                          ),
                           if (videoDetailController.showReply)
                             videoReplyPanel(isNested: true),
                           if (_shouldShowSeasonPanel) seasonPanel,
@@ -1743,7 +1746,9 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
           offstage: isFullScreen,
           child: SizedBox(
             width: introWidth,
-            height: maxHeight - padding.top,
+            // 与视频同底边：方形屏/受限窗口下底部有安全区时，
+            // 右侧栏内容同样避开，不再压到手势条/三键
+            height: maxHeight - padding.vertical,
             child: MiniScaffold(
               key: videoDetailController.childKey,
               body: Column(
@@ -1758,6 +1763,10 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
                           videoIntro(
                             width: introWidth,
                             height: maxHeight,
+                            // 方形屏/受限窗口下右列可能很窄（~150dp），
+                            // 简介面板启用紧凑布局，避免头像/操作栏挤占内容
+                            isCompact:
+                                introWidth < Constants.compactColumnWidth,
                           ),
                           if (videoDetailController.showReply) videoReplyPanel(),
                           if (_shouldShowSeasonPanel) seasonPanel,
@@ -1954,6 +1963,30 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     );
   }
 
+  /// 方形屏竖屏视频分栏：左侧视频撑满高度（按 9:16 取宽），右侧简介/评论。
+  /// 结构与近方形布局的 Scaffold 一致，内部复用 childSplit(9/16)。
+  Widget get childWhenDisabledSquareSplit => Obx(() {
+    final isFullScreen = _layoutFullScreen;
+    return SimpleScaffold(
+      appBar: removeAppBar(isFullScreen)
+          ? null
+          : AppBar(
+              backgroundColor: Colors.black,
+              automaticallyImplyLeading: false,
+              toolbarHeight: isFullScreen
+                  ? 0
+                  : (_fixedTopInset ?? padding.top),
+              primary: false,
+            ),
+      body: Padding(
+        padding: isFullScreen
+            ? EdgeInsets.zero
+            : padding.copyWith(top: 0, bottom: 0),
+        child: childSplit(9 / 16),
+      ),
+    );
+  });
+
   Widget get childWhenDisabledAlmostSquare => Obx(() {
     final isFullScreen = _layoutFullScreen;
     return SimpleScaffold(
@@ -1992,6 +2025,10 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
 
   Widget _childWhenDisabledAlmostSquareInner(bool isFullScreen) {
     final shouldShowSeasonPanel = _shouldShowSeasonPanel;
+    double flex = 1;
+    if (videoDetailController.showReply) flex++;
+    if (shouldShowSeasonPanel) flex++;
+    final introWidth = maxWidth / flex;
     final double height = maxHeight / 2.5;
     final videoHeight = isFullScreen ? maxHeight : height;
     final bottomHeight = maxHeight - height - padding.top;
@@ -2023,13 +2060,12 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
                       children: [
                         Expanded(
                           child: videoIntro(
-                            width: () {
-                              double flex = 1;
-                              if (videoDetailController.showReply) flex++;
-                              if (shouldShowSeasonPanel) flex++;
-                              return maxWidth / flex;
-                            }(),
+                            width: introWidth,
                             height: bottomHeight,
+                            // 近方形窗口下底部并排列较窄（Pura X 外屏
+                            // 327dp 下每列约 163dp），简介面板同样启用紧凑布局
+                            isCompact:
+                                introWidth < Constants.compactColumnWidth,
                           ),
                         ),
                         if (videoDetailController.showReply)
@@ -2243,6 +2279,25 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
   bool get _harmonyFullscreenNoSafeArea =>
       OS.isHarmony && HarmonyChannel.isWindowMode && isFullScreen;
 
+  /// 小尺寸近方形窗口（如 Pura X 外屏 980×980px@3x ≈ 327×327dp）：
+  /// 横屏视频会走竖屏布局，视频占掉大半高度后下方内容区很矮，简介面板
+  /// 需启用紧凑布局；更大的近方形窗口（桌面端等）保持完整布局。
+  /// maxWidth 上限取 500：覆盖外屏（327dp），排除桌面端大窗口。
+  bool get _isSmallNearSquareWindow =>
+      maxWidth / maxHeight >= 0.85 &&
+      maxWidth / maxHeight < kScreenRatio &&
+      maxWidth < 500;
+
+  /// 方形屏（如 Pura X 外屏 1:1）竖屏视频：采用「左视频 + 右侧简介/评论」
+  /// 分栏布局（childSplit）。近方形屏幕（0.85 ≤ 宽高比 < kScreenRatio）下，
+  /// 竖屏视频按 9:16 取宽即可撑满整屏高度；顶部视频布局则会让视频全屏
+  /// （maxVideoHeight 取到整屏高）左右留大片黑边、简介/评论完全在屏外。
+  /// 读取 isVertical（Rx），须在 Obx 内使用。
+  bool get _usesSquareSplitLayout =>
+      videoDetailController.isVertical.value &&
+      maxWidth / maxHeight >= 0.85 &&
+      maxWidth / maxHeight < kScreenRatio;
+
   /// 「左视频 + 右侧栏」的横屏布局（childWhenDisabledLandscape）是否生效。
   bool get _usesLandscapeLayout =>
       videoDetailController.horizontalScreen &&
@@ -2261,12 +2316,22 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     Widget child;
     if (videoDetailController.plPlayerController.isPipMode) {
       child = plPlayer(width: maxWidth, height: maxHeight, isPipMode: true);
-    } else if (_usesLandscapeLayout) {
-      child = childWhenDisabledLandscape;
-    } else if (_usesPortraitLayout) {
-      child = childWhenDisabled;
     } else {
-      child = childWhenDisabledAlmostSquare;
+      // isVertical 初始来自路由参数（缺省 false），播放信息就绪后才可能置
+      // true；方形屏竖屏视频要走分栏布局（_usesSquareSplitLayout），分支
+      // 选择依赖该 Rx，须包 Obx 才能在翻转时重建。
+      child = Obx(() {
+        if (_usesSquareSplitLayout) {
+          return childWhenDisabledSquareSplit;
+        }
+        if (_usesLandscapeLayout) {
+          return childWhenDisabledLandscape;
+        }
+        if (_usesPortraitLayout) {
+          return childWhenDisabled;
+        }
+        return childWhenDisabledAlmostSquare;
+      });
     }
     if (videoDetailController.plPlayerController.keyboardControl) {
       child = PlayerFocus(
@@ -2356,7 +2421,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
       );
     }
 
-    Widget tabBar() {
+    Widget tabBar(bool compact) {
       final flag = !needIndicator || tabs.length == 1;
       return TabBar(
         padding: .zero,
@@ -2367,8 +2432,10 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
         indicator: flag ? const BoxDecoration() : null,
         labelColor: flag ? colorScheme.onSurface : null,
         labelStyle:
-            TabBarTheme.of(context).labelStyle?.copyWith(fontSize: 13) ??
-            const TextStyle(fontSize: 13),
+            TabBarTheme.of(context).labelStyle?.copyWith(
+              fontSize: compact ? 12 : 13,
+            ) ??
+            TextStyle(fontSize: compact ? 12 : 13),
         onTap: (value) {
           // 切 tab 后免点击直接支持方向键滚动：焦点交给 tab 内容区
           if (value != videoDetailController.tabCtr.index) {
@@ -2400,90 +2467,113 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
           return Obx(() {
             final count = _videoReplyController.count.value;
             return Tab(
-              text: '评论${count == -1 ? '' : ' ${NumUtils.numFormat(count)}'}',
+              // 窄列空间不足时不显示评论数，避免标签换行/截断
+              text:
+                  '评论${!compact && count != -1 ? ' ${NumUtils.numFormat(count)}' : ''}',
             );
           });
         } else {
-          return Tab(text: text);
+          // 窄列下「播放列表」缩短为「列表」，避免标签换行/截断
+          return Tab(text: compact && text == '播放列表' ? '列表' : text);
         }
       }).toList(),
     );
   }
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: theme.dividerColor.withValues(alpha: 0.1),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 窄列（Pura X 外屏分栏右列实测 ≈177dp）：整行紧凑化。
+        // 「发弹幕/弹幕开关」是外屏方形窗口非全屏下的唯一入口
+        // （播放器底栏因 isPortrait 为 true 不显示），保留但压缩占用宽度
+        final compact = constraints.maxWidth < Constants.compactColumnWidth;
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: theme.dividerColor.withValues(alpha: 0.1),
+              ),
+            ),
           ),
-        ),
-      ),
-      child: SizedBox(
-        height: 45,
-        child: Row(
-          children: [
-            if (tabs.isEmpty)
-              const Spacer()
-            else
-              Expanded(
-                child: Align(
-                  alignment: .centerLeft,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: 96.0 * tabs.length),
-                    child: tabBar(),
-                  ),
-                ),
-              ),
-            SizedBox(
-              height: 32,
-              child: TextButton(
-                style: const ButtonStyle(
-                  padding: WidgetStatePropertyAll(.zero),
-                ),
-                onPressed: videoDetailController.showShootDanmakuSheet,
-                child: Text(
-                  '发弹幕',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ),
-            SizedBox.square(
-              dimension: 38,
-              child: Obx(
-                () {
-                  final ctr = videoDetailController.plPlayerController;
-                  final enableShowDanmaku = ctr.enableShowDanmaku.value;
-                  return IconButton(
-                    onPressed: () {
-                      final newVal = !enableShowDanmaku;
-                      ctr.enableShowDanmaku.value = newVal;
-                      if (!ctr.tempPlayerConf) {
-                        GStorage.setting.put(
-                          SettingBoxKey.enableShowDanmaku,
-                          newVal,
-                        );
-                      }
-                    },
-                    icon: Icon(
-                      size: 22,
-                      enableShowDanmaku
-                          ? CustomIcons.dm_on
-                          : CustomIcons.dm_off,
-                      color: enableShowDanmaku
-                          ? colorScheme.secondary
-                          : colorScheme.outline,
+          child: SizedBox(
+            height: compact ? 38 : 45,
+            child: Row(
+              children: [
+                if (tabs.isEmpty)
+                  const Spacer()
+                else
+                  Expanded(
+                    child: Align(
+                      alignment: .centerLeft,
+                      child: compact
+                          ? tabBar(compact)
+                          : ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: 96.0 * tabs.length,
+                              ),
+                              child: tabBar(compact),
+                            ),
                     ),
-                  );
-                },
-              ),
+                  ),
+                SizedBox(
+                  height: 32,
+                  child: TextButton(
+                    // 紧凑时解除 M3 默认 64dp 最小宽度与 48dp 点击区，
+                    // 让「发弹幕」按文字宽度让出空间给标签
+                    style: compact
+                        ? const ButtonStyle(
+                            padding: WidgetStatePropertyAll(.zero),
+                            minimumSize: WidgetStatePropertyAll(Size.zero),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          )
+                        : const ButtonStyle(
+                            padding: WidgetStatePropertyAll(.zero),
+                          ),
+                    onPressed: videoDetailController.showShootDanmakuSheet,
+                    child: Text(
+                      '发弹幕',
+                      style: TextStyle(
+                        fontSize: compact ? 11 : 12,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox.square(
+                  dimension: compact ? 34 : 38,
+                  child: Obx(
+                    () {
+                      final ctr = videoDetailController.plPlayerController;
+                      final enableShowDanmaku = ctr.enableShowDanmaku.value;
+                      return IconButton(
+                        onPressed: () {
+                          final newVal = !enableShowDanmaku;
+                          ctr.enableShowDanmaku.value = newVal;
+                          if (!ctr.tempPlayerConf) {
+                            GStorage.setting.put(
+                              SettingBoxKey.enableShowDanmaku,
+                              newVal,
+                            );
+                          }
+                        },
+                        icon: Icon(
+                          size: compact ? 20 : 22,
+                          enableShowDanmaku
+                              ? CustomIcons.dm_on
+                              : CustomIcons.dm_off,
+                          color: enableShowDanmaku
+                              ? colorScheme.secondary
+                              : colorScheme.outline,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                SizedBox(width: compact ? 6 : 14),
+              ],
             ),
-            const SizedBox(width: 14),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -2680,6 +2770,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     bool? isHorizontal,
     bool needRelated = true,
     bool needCtr = true,
+    bool isCompact = false,
   }) {
     if (videoDetailController.isFileSource) {
       return localIntroPanel(needCtr: needCtr);
@@ -2702,6 +2793,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
               onShowMemberPage: onShowMemberPage,
               isPortrait: isPortrait,
               isHorizontal: isHorizontal ?? width! / height! >= kScreenRatio,
+              isCompact: isCompact,
             ),
             if (needRelated && videoDetailController.showRelatedVideo) ...[
               SliverToBoxAdapter(
@@ -3139,19 +3231,6 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
       final manual = _manualPipRequested;
       _manualPipRequested = false;
       _startInAppPipIfNeeded(fromPop: true, manual: manual);
-      // 消费 didPopNext else 分支设的重试标志（用户真的继续 pop 了）。
-      // 立即调用通常足够（didPopNext 已同步关闭其他 PiP，playerInit 多半已完成）；
-      // 若立即失败（rapid back press 时 playerInit 还在 await，playerStatus 不是 playing），
-      // 延迟到下一帧再试一次，那时 playerInit 已完成、playerStatus=playing。
-      if (_pipRetryPending) {
-        final needDeferredRetry = !_isEnteringPipMode;
-        _pipRetryPending = false;
-        if (needDeferredRetry) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _startInAppPipIfNeeded(fromPop: true);
-          });
-        }
-      }
     } else {
       // pop 被拦下，手动小窗的一次性豁免不能留给下一次普通返回
       _manualPipRequested = false;

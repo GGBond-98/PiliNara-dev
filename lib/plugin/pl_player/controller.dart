@@ -91,6 +91,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
   static PlPlayerController? _instance;
 
+  /// 仍存活的实例登记表（含脱离单例槽位、由应用内小窗独占的实例）。
+  /// 小窗并行播放引入多实例后，dispose 尾部清空单例槽位时需从中挑选
+  /// 接管者，让全局静态入口（通知栏控制/音频会话/自动画中画）继续生效
+  static final List<PlPlayerController> _liveInstances = [];
+
   /// 真正的销毁已经开始（区别于 _playerCount 递减的早退路径）。
   /// dispose() 的收尾是异步的（等在途数据源与底层播放器释放），在尾部把
   /// _instance 置空之前，新页面可能已经通过 getInstance()/ensureInstance()
@@ -821,6 +826,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
   // 添加一个私有构造函数
   PlPlayerController._() {
+    _liveInstances.add(this);
     if (PlatformUtils.isMobile) {
       _orientationListener = NativeDeviceOrientationCommunicator()
           .onOrientationChanged(
@@ -872,6 +878,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   // 获取实例 传参
   static PlPlayerController getInstance({bool isLive = false}) {
     _dropDisposedInstance();
+    _detachPipPlayerIfNeeded();
     // 如果实例尚未创建，则创建一个新实例
     return (_instance ??= PlPlayerController._())
       ..isLive = isLive
@@ -880,7 +887,48 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
 
   static PlPlayerController ensureInstance({bool isLive = false}) {
     _dropDisposedInstance();
+    _detachPipPlayerIfNeeded();
     return (_instance ??= PlPlayerController._())..isLive = isLive;
+  }
+
+  /// 应用内小窗保留并行播放：单例槽位仍被小窗持有的实例占用时（打开
+  /// 新视频/直播等场景），先把小窗实例摘下——此后它由小窗独占继续播放，
+  /// 本次调用为新页面创建全新实例，两路播放互不影响
+  static void _detachPipPlayerIfNeeded() {
+    final curr = _instance;
+    if (curr != null &&
+        PipOverlayService.isInPipMode &&
+        identical(curr, PipOverlayService.savedPlayerController)) {
+      curr.detachForPipPlayback();
+    }
+  }
+
+  /// 把本实例从单例槽位摘下（见 [_detachPipPlayerIfNeeded]）
+  void detachForPipPlayback() {
+    if (identical(_instance, this)) {
+      _instance = null;
+    }
+  }
+
+  /// 小窗归位/页面回到前台时把本实例重新挂回单例槽位：全局静态入口
+  /// （通知栏播放控制、音频会话抢断、自动画中画）随之指向前台实例；
+  /// 被顶替的原实例不受影响（其页面仍持有引用，销毁时按自身实例回收）
+  void attachAsSingleton() {
+    if (_disposeRequested || identical(_instance, this)) {
+      return;
+    }
+    _instance = this;
+  }
+
+  /// 多实例并行（小窗+页面）时，是否有其他存活实例正在播放。
+  /// 暂停/销毁本路播放器时据此避免误关另一路依赖的全局屏幕常亮
+  bool _hasOtherPlayingInstance() {
+    for (final p in _liveInstances) {
+      if (!identical(p, this) && !p._disposeRequested && p.playerStatus.isPlaying) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// dispose() 是异步收尾，尾部才把 _instance 置空；其间任何获取实例的调用
@@ -1314,7 +1362,6 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
               ? (Pref.enableAppVolume ? volume.value * 100 : Pref.playerVolume)
               : volume.value * 100)
           .toString(),
-      'volume-max': kMaxVolume.toString(),
     };
     final autosync = Pref.autosync;
     if (autosync != '0') {
@@ -1518,7 +1565,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   }
 
   void _stopWakeLock() {
-    WakelockPlus.disable();
+    // 多实例并行（小窗+页面）时，本路暂停不能关掉另一路正在播放的
+    // 实例所依赖的全局屏幕常亮
+    if (!_hasOtherPlayingInstance()) {
+      WakelockPlus.disable();
+    }
     _updatePlaybackState(debugLabel: 'onVideoPaused');
   }
 
@@ -3082,7 +3133,14 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _audioReopened = false;
     _lastAppLifecycleState = null;
     // 每次减1，最后销毁
-    resetScreenRotation();
+    // 多实例并行（小窗+页面）时，另一实例可能正处于全屏横屏：
+    // 本实例销毁不能把它的方向复位掉
+    if (!_liveInstances.any(
+      (p) =>
+          !identical(p, this) && !p._disposeRequested && p.isFullScreen.value,
+    )) {
+      resetScreenRotation();
+    }
     cancelLongPressTimer();
     _cancelSpeedLockHintTimer();
     speedLocked = false;
@@ -3140,7 +3198,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     _positionListeners.clear();
     _statusListeners.clear();
     _stopWakeLockTimer();
-    WakelockPlus.disable();
+    // 多实例并行时保留另一路正在播放实例的屏幕常亮
+    if (!_hasOtherPlayingInstance()) {
+      WakelockPlus.disable();
+    }
     if (kDebugMode) {
       debugPrint('dispose player');
     }
@@ -3159,8 +3220,17 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     // 收尾期间新页面可能已通过 _dropDisposedInstance 领走/重建了单例：
     // 此时不能把新实例的静态引用清掉，也不能 clear 新页面正在使用的
     // 全局 service handler（否则新页面黑屏、控件失效）
+    _liveInstances.remove(this);
     if (identical(_instance, this)) {
-      _instance = null;
+      // 单例槽位让渡给仍存活的实例（如小窗并行播放中的另一路播放器），
+      // 全局静态入口（通知栏/音频会话/自动画中画）随之指向它；
+      // 无存活实例才真正清空并撤下媒体通知
+      for (final p in _liveInstances) {
+        if (!p._disposeRequested) {
+          _instance = p;
+          break;
+        }
+      }
     }
     if (_instance == null) {
       videoPlayerServiceHandler?.clear();

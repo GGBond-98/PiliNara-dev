@@ -475,22 +475,10 @@ class VideoDetailController extends GetxController
       await playerInit();
     };
 
-    // 开启新视频时，如果存在前代播放器的应用内小窗，则按播放上下文决定是否重置旧状态
-    // 避免不同视频/分P之间 SponsorBlock 片段状态污染，同时保留同上下文无缝恢复能力
-    if (PipOverlayService.isInPipMode) {
-      if (kDebugMode) {
-        debugPrint(
-          '[VideoDetailController] Active PiP detected, closing before new video initialization with context-aware reset',
-        );
-      }
-      PipOverlayService.stopPip(
-        immediate: true,
-        targetContextKey: PipOverlayService.contextKeyFromArgs(args),
-      );
-      // 同步清理旧视频的 SponsorBlock 状态，避免污染新视频
-      // 不能放在 stopPip 里异步执行，否则会与新视频初始化竞态
-      resetBlock();
-    }
+    // 并行播放：onInit 时若存在其他视频的应用内小窗，不再关闭它——
+    // 小窗由其 owner 页面独立持有继续播放，本 controller 的小窗实例已由
+    // PlPlayerController.getInstance 自动从单例槽位摘下，两路互不影响。
+    // SponsorBlock 状态各 controller 独立，无需为小窗重置。
 
     videoType = args['videoType'];
     if (videoType == VideoType.pgc) {
@@ -1933,7 +1921,12 @@ class VideoDetailController extends GetxController
     if (plPlayerController.showViewPoints) {
       viewPointList.clear();
     }
-    if (!PipOverlayService.isInPipMode) {
+    // 并行播放期间小窗里可能是其他页面的播放器：只有小窗持有"本页的"
+    // 实例时才保留块跳过状态，否则新分P会残留上一分P的片段
+    final bool myPlayerInPip =
+        PipOverlayService.isInPipMode &&
+        identical(PipOverlayService.savedPlayerController, plPlayerController);
+    if (!myPlayerInPip) {
       resetBlock();
     }
 
