@@ -62,6 +62,12 @@ abstract class HarmonyChannel {
       case 'onHomeTabChange':
         _onHomeTabChange?.call(call.arguments['index'] as int? ?? 0);
         break;
+      // 智感握持状态变化（true = 右手握持，侧栏换到右侧）
+      case 'onGripSideChange':
+        _onGripSideChange?.call(
+          call.arguments['isRightHand'] as bool? ?? false,
+        );
+        break;
       default:
         break;
     }
@@ -89,8 +95,20 @@ abstract class HarmonyChannel {
   /// Shell 页签切换回调：由 MainController 注册
   static void Function(int index)? _onShellTabSwitch;
 
-  static set onShellTabSwitch(void Function(int)? callback) =>
+  static set onShellTabSwitch(void Function(int index)? callback) =>
       _onShellTabSwitch = callback;
+
+  /// 智感握持状态回调：由 MainController 注册
+  static void Function(bool isRightHand)? _onGripSideChange;
+
+  static set onGripSideChange(void Function(bool isRightHand)? callback) =>
+      _onGripSideChange = callback;
+
+  /// 开启智感握持（握持手识别）监听，状态变化经 onGripSideChange 推送
+  static Future<void> startGripSidebar() => _invoke('startGripSidebar');
+
+  /// 关闭智感握持监听
+  static Future<void> stopGripSidebar() => _invoke('stopGripSidebar');
 
   /// 向原生发送壳配置的公共辅助：非鸿蒙直接跳过，静默失败。
   static Future<void> _invoke(

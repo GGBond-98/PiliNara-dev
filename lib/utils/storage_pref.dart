@@ -1275,6 +1275,10 @@ abstract final class Pref {
   static bool get enableHdsTopBar =>
       _setting.get(SettingBoxKey.enableHdsTopBar, defaultValue: false);
 
+  /// 智感握持：侧边栏随握持手自动切换左右
+  static bool get enableSmartGripSidebar =>
+      _setting.get(SettingBoxKey.enableSmartGripSidebar, defaultValue: false);
+
   /// 鸿蒙沉浸光感底栏材质等级，仅原生底栏启用时生效
   static HdsMaterialLevel get hdsTabMaterialLevel =>
       HdsMaterialLevel.values[_setting.get(

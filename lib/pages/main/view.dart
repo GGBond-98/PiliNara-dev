@@ -467,7 +467,7 @@ class _MainAppState extends PopScopeState<MainApp>
     return bottomNav;
   }
 
-  Widget _sideBar(ThemeData theme) {
+  Widget _sideBar(ThemeData theme, {bool onRight = false}) {
     final Widget sideBar = _mainController.navigationBars.length > 1
         ? context.isTablet && _mainController.optTabletNav
               ? Column(
@@ -536,24 +536,29 @@ class _MainAppState extends PopScopeState<MainApp>
           );
     // NavigationDrawer / NavigationRail 内部各自带一层 SafeArea：抽屉那层是
     // SafeArea(bottom: false)，左右两侧都吃（见 SDK navigation_drawer.dart）。
-    // 而这两侧的避让本页都已经让过了——右侧由 build 里包住整个 body 的
-    // Padding(right: _padding.right) 负责，左侧由下面这层 Padding 负责（侧栏
-    // 上方的头像/消息/搜索列不在 SafeArea 内，两组控件得一起移，否则一个右移
-    // 一个不动会错位）。这里把子树里的 padding.left/right 清掉，避免二次避让：
-    // 抽屉宽度是固定的 130，右边再让一次就只剩 100 出头，页签的选中底色跟着
-    // 变窄、标签还会被 Stack 裁掉（大屏横屏且右侧有挖孔/安全区时最明显）。
-    final left = MediaQuery.paddingOf(context).left;
+    // 而这两侧的避让本页都已经让过了——侧栏靠屏幕一侧的外侧安全区由下面这层
+    // Padding 负责（智感握持换边时随 onRight 切换左右；另一侧由 build 里包住
+    // 内容的 Padding 负责），侧栏上方的头像/消息/搜索列不在 SafeArea 内，两组
+    // 控件得一起移，否则一个右移一个不动会错位。这里把子树里的
+    // padding.left/right 清掉，避免二次避让：抽屉宽度是固定的 130，右边再让
+    // 一次就只剩 100 出头，页签的选中底色跟着变窄、标签还会被 Stack 裁掉
+    // （大屏横屏且右侧有挖孔/安全区时最明显）。
+    final sideInset = onRight
+        ? MediaQuery.paddingOf(context).right
+        : MediaQuery.paddingOf(context).left;
     final Widget child = MediaQuery.removePadding(
       context: context,
       removeLeft: true,
       removeRight: true,
       child: sideBar,
     );
-    if (left <= 0) {
+    if (sideInset <= 0) {
       return child;
     }
     return Padding(
-      padding: EdgeInsets.only(left: left),
+      padding: onRight
+          ? EdgeInsets.only(right: sideInset)
+          : EdgeInsets.only(left: sideInset),
       child: child,
     );
   }
@@ -581,17 +586,36 @@ class _MainAppState extends PopScopeState<MainApp>
       bottomNav = _bottomNav;
       child = Row(children: [Expanded(child: child)]);
     } else {
-      child = Row(
-        children: [
-          _sideBar(theme),
-          VerticalDivider(
-            width: 1,
-            endIndent: _padding.bottom,
-            color: theme.colorScheme.outline.withValues(alpha: 0.06),
+      final content = child;
+      // 智感握持：右手握持时侧栏换到右侧。靠屏幕左右两侧的外侧安全区
+      // 由这里的 Padding 与 _sideBar 内的 Padding 分别避让（换边时互换），
+      // 故下方 body 的 Padding 在侧栏布局下两侧都为 0。
+      child = Obx(() {
+        final sideBarRight = _mainController.gripSideBarRight.value;
+        final divider = VerticalDivider(
+          width: 1,
+          endIndent: _padding.bottom,
+          color: theme.colorScheme.outline.withValues(alpha: 0.06),
+        );
+        return Padding(
+          padding: sideBarRight
+              ? EdgeInsets.only(left: _padding.left)
+              : EdgeInsets.only(right: _padding.right),
+          child: Row(
+            children: [
+              if (sideBarRight) ...[
+                Expanded(child: content),
+                divider,
+                _sideBar(theme, onRight: true),
+              ] else ...[
+                _sideBar(theme),
+                divider,
+                Expanded(child: content),
+              ],
+            ],
           ),
-          Expanded(child: child),
-        ],
-      );
+        );
+      });
     }
 
     // Flutter 在鸿蒙平台上的状态栏颜色依赖于AppBar设置的backgroundColor进行取色，因此需要写这个神人代码保证取色能力正常
@@ -611,9 +635,10 @@ class _MainAppState extends PopScopeState<MainApp>
         backgroundColor: backgroundColor,
       ),
       body: Padding(
+        // 侧栏布局下左右外侧安全区已在侧栏分支内按侧栏左右自行避让
         padding: EdgeInsets.only(
           left: _mainController.useBottomNav ? _padding.left : 0.0,
-          right: _padding.right,
+          right: _mainController.useBottomNav ? _padding.right : 0.0,
         ),
         child: child,
       ),

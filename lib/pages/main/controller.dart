@@ -95,6 +95,9 @@ class MainController extends GetxController
   final mainTabBarView = Pref.mainTabBarView;
   late final optTabletNav = Pref.optTabletNav;
 
+  /// 智感握持：当前是否右手握持，横屏侧栏布局下侧栏随其换到右侧
+  final RxBool gripSideBarRight = false.obs;
+
   late bool directExitOnBack = Pref.directExitOnBack;
   late bool showTrayIcon = Pref.showTrayIcon;
   late bool minimizeOnExit = Pref.minimizeOnExit;
@@ -172,6 +175,13 @@ class MainController extends GetxController
           HarmonyChannel.setTopBarIsHome(isHome);
         }
       });
+      // 智感握持：握持手状态回调 + 按设置决定冷启动是否订阅
+      HarmonyChannel.onGripSideChange = (bool isRightHand) {
+        gripSideBarRight.value = isRightHand;
+      };
+      if (Pref.enableSmartGripSidebar) {
+        HarmonyChannel.startGripSidebar();
+      }
       _initHdsBar();
     }
   }
@@ -519,6 +529,7 @@ class MainController extends GetxController
   void onClose() {
     if (OS.isHarmony) {
       HarmonyChannel.onShellTabSwitch = null;
+      HarmonyChannel.onGripSideChange = null;
     }
     barOffset?.close();
     controller.dispose();

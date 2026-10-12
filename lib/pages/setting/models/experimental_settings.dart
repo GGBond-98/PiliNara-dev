@@ -1,11 +1,13 @@
 import 'package:PiliPlus/harmony_adapt/harmony_channel.dart';
 import 'package:PiliPlus/models/common/harmony/hds_material_level.dart';
+import 'package:PiliPlus/pages/main/controller.dart';
 import 'package:PiliPlus/pages/setting/models/model.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+import 'package:get/get.dart';
 import 'package:os_type/os_type.dart';
 
 List<SettingsModel> experimentalSettings = [
@@ -40,6 +42,23 @@ List<SettingsModel> experimentalSettings = [
     defaultVal: false,
     onChanged: (_) => SmartDialog.showToast("重启生效"),
   ),
+  if (OS.isHarmony)
+    SwitchModel(
+      title: '智感握持侧边栏',
+      subtitle: '横屏侧边栏随握持手自动切换左右，需设备支持',
+      leading: const Icon(Icons.back_hand_outlined),
+      setKey: SettingBoxKey.enableSmartGripSidebar,
+      defaultVal: false,
+      onChanged: (value) {
+        if (value) {
+          HarmonyChannel.startGripSidebar();
+        } else {
+          HarmonyChannel.stopGripSidebar();
+          // 关闭后恢复默认左侧
+          Get.find<MainController>().gripSideBarRight.value = false;
+        }
+      },
+    ),
   const SwitchModel(
     title: '显示实际百分比音量',
     subtitle: '适配鸿蒙音量调节步进',

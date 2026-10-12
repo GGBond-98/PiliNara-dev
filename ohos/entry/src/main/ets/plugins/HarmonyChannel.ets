@@ -4,6 +4,7 @@ import { http } from "@kit.NetworkKit";
 import { util } from "@kit.ArkTS";
 import { fileIo } from "@kit.CoreFileKit";
 import { formProvider } from "@kit.FormKit";
+import { motion } from "@kit.MultimodalAwarenessKit";
 import AbilityConstant from "@ohos.app.ability.AbilityConstant";
 import Want from "@ohos.app.ability.Want";
 import ConfigurationConstant from "@ohos.app.ability.ConfigurationConstant";
@@ -60,6 +61,7 @@ export default class HarmonyChannel implements FlutterPlugin {
     this.stopCutoutListener();
     this.stopDecorListener();
     this.stopFreeWindowModeListener();
+    this.stopGripListener();
   }
 
   /**
@@ -105,6 +107,73 @@ export default class HarmonyChannel implements FlutterPlugin {
       this.lastWindow?.off('freeWindowModeChange', this.freeWindowModeCallback);
     } catch (err) {
       // 窗口已销毁
+    }
+  }
+
+  /**
+   * 智感握持（握持手识别）：Dart 侧开关开启时订阅，状态变化经
+   * onGripSideChange 推送给 Flutter（侧栏随握持手换边）。
+   *
+   * 优先 holdingHandChanged（API 20+，握持手：手机拿在手里即感知）；
+   * 设备不支持（801）时回退 operatingHandChanged（API 15+，触控操作手，
+   * 需触控数次后才上报，语义近似）。两者均需 ohos.permission.DETECT_GESTURE
+   * （module.json5 已声明，system_grant）。
+   *
+   * 状态映射：右侧 = 2（RIGHT_HAND_HELD / RIGHT_HAND_OPERATED），
+   * 其余（未握持/双手/未识别）一律回落默认左侧。
+   */
+  private gripListening: boolean = false;
+  private gripUsingOperatingHand: boolean = false;
+
+  private gripHoldingCallback = (status: motion.HoldingHandStatus): void => {
+    this.dispatchGripStatus(status);
+  };
+
+  private gripOperatingCallback = (status: motion.OperatingHandStatus): void => {
+    this.dispatchGripStatus(status);
+  };
+
+  private dispatchGripStatus(status: number): void {
+    const args: Record<string, boolean> = { 'isRightHand': status === 2 };
+    this.channel?.invokeMethod("onGripSideChange", args);
+  }
+
+  private startGripListener(): void {
+    if (this.gripListening) {
+      return;
+    }
+    try {
+      motion.on('holdingHandChanged', this.gripHoldingCallback);
+      this.gripListening = true;
+      this.gripUsingOperatingHand = false;
+      return;
+    } catch (err) {
+      const error = err as BusinessError;
+      console.error(`HarmonyChannel on holdingHandChanged failed: ${error.code}`);
+    }
+    try {
+      motion.on('operatingHandChanged', this.gripOperatingCallback);
+      this.gripListening = true;
+      this.gripUsingOperatingHand = true;
+    } catch (err) {
+      const error = err as BusinessError;
+      console.error(`HarmonyChannel on operatingHandChanged failed: ${error.code}`);
+    }
+  }
+
+  private stopGripListener(): void {
+    if (!this.gripListening) {
+      return;
+    }
+    this.gripListening = false;
+    try {
+      if (this.gripUsingOperatingHand) {
+        motion.off('operatingHandChanged', this.gripOperatingCallback);
+      } else {
+        motion.off('holdingHandChanged', this.gripHoldingCallback);
+      }
+    } catch (err) {
+      // 订阅已被系统侧清理
     }
   }
 
@@ -556,6 +625,16 @@ export default class HarmonyChannel implements FlutterPlugin {
       }
       case "stopBackgroundTask": {
         this.stopBackgroundTaskInner();
+        result.success(true);
+        break;
+      }
+      case "startGripSidebar": {
+        this.startGripListener();
+        result.success(true);
+        break;
+      }
+      case "stopGripSidebar": {
+        this.stopGripListener();
         result.success(true);
         break;
       }
