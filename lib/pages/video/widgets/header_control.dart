@@ -37,6 +37,7 @@ import 'package:PiliPlus/pages/video/introduction/ugc/widgets/menu_row.dart';
 import 'package:PiliPlus/pages/video/widgets/header_mixin.dart';
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/models/data_source.dart';
+import 'package:PiliPlus/plugin/pl_player/models/fullscreen_mode.dart' show kScreenRatio;
 import 'package:PiliPlus/plugin/pl_player/models/play_repeat.dart';
 import 'package:PiliPlus/services/service_locator.dart';
 import 'package:PiliPlus/services/shutdown_timer_service.dart'
@@ -137,12 +138,32 @@ mixin TimeBatteryMixin<T extends StatefulWidget> on State<T> {
     _clock = null;
   }
 
+  /// Pura X 外屏（小尺寸近方形窗口，判据同 video/view.dart 的
+  /// _isSmallNearSquareWindow）：无论是否全屏，控制栏都显示时间/电量
+  bool get _isSmallNearSquareWindow {
+    final size = MediaQuery.sizeOf(context);
+    return size.width / size.height >= 0.85 &&
+        size.width / size.height < kScreenRatio &&
+        size.width < 500;
+  }
+
   bool _showCurrTime = false;
   void showCurrTimeIfNeeded(bool isFullScreen) {
-    _showCurrTime = !isPortrait && (isFullScreen || !horizontalScreen);
+    // 近方形外屏恒显；其余场景：全屏（任意方向）必隐藏系统状态栏，
+    // 播放器内时间是唯一来源——方形屏/竖屏全屏不转横，isPortrait 仍为
+    // true，不能用「!isPortrait」作前置条件，否则全屏看不到时间电量
+    _showCurrTime = _isSmallNearSquareWindow ||
+        isFullScreen ||
+        (!isPortrait && !horizontalScreen);
     if (!_showCurrTime) {
       stopClock();
       stopBatteryInfoListener();
+    } else if (plPlayerController.showControls.value &&
+        !plPlayerController.controlsLock.value) {
+      // 进全屏瞬间 showControls 不变，Rx 监听不会触发，
+      // 重建时直接启动，避免时间/电量要等下次唤出控制栏才出现
+      startClock();
+      updateBatteryInfoIfNeeded();
     }
   }
 
