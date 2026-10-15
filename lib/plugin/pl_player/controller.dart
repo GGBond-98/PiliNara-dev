@@ -101,7 +101,9 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   late final PlayerRebuildQueue _playerQueue = PlayerRebuildQueue(
     hasPlayer: () => _videoPlayerController != null,
     isStale: () =>
-        _usesPlatformView != usePlatformView || _appliedHdrMode != ohosHdrMode,
+        _usesPlatformView != usePlatformView ||
+        _appliedHdrMode != ohosHdrMode ||
+        _appliedVo != _directRenderVo,
     rebuild: _rebuildForRenderPath,
     onError: _onRenderPathRebuildFailed,
   );
@@ -625,17 +627,33 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 那些 Flutter 层不必为了显示视频而透明；视频矩形以外露出的区域由页面
   /// 内容自带的背景色兜底（见 videoDetailPage 的 ColoredBox）。
   ///
-  /// 没有开关：关掉平台视图等于关掉 HDR（元数据会在 Flutter 纹理那一步丢光），
-  /// 所以它不是一个用户能做的取舍，跟随「启用 HDR 视频」即可。
+  /// HDR 没有开关：关掉平台视图等于关掉 HDR（元数据会在 Flutter 纹理那一步
+  /// 丢光），所以它不是一个用户能做的取舍，跟随「启用 HDR 视频」即可。
+  /// 直显渲染是进平台视图的另一个独立入口，见 [_directRenderVo]。
   /// 渲染路径与全屏状态无关：进出全屏不再重建播放器，避免 HDR 切换时的
   /// 重新缓冲。画中画要排除：PiP 是另一块 XComponent（FloatingPlugin 会把
   /// Flutter 引擎重新 attach 上去），平台视图不会跟过去，留在平台视图路径上
   /// 的结果是 PiP 窗口里一片空白。退回纹理路径至少画面还在，只是没有 HDR。
   ///
   /// 应用内小窗同理要排除，见 [notifyInAppPipChanged]。
+  /// 直显渲染（实验）：SDR 硬解走平台视图时改用 `ohcodec_embed`，解码器
+  /// Surface 输出直通 XComponent，跳过 gpu-next 逐帧 GL 重渲染；低帧率内容
+  /// 再配 `vd-lavc-ohos-vrr` 把面板拉到 30Hz 省电。默认关。
+  /// HDR 仍走 gpu-next（信令路径已验证，直显的 HDR 行为未知）；无硬解、
+  /// 画中画时不用——条件不满足自动回退纹理路径。
+  String? get _directRenderVo =>
+      OS.isHarmony &&
+      Pref.videoDirectRender &&
+      hwdec != null &&
+      !_isHDRPlayback &&
+      !isPipMode &&
+      !_isInInAppPip
+          ? 'ohcodec_embed'
+          : null;
+
   bool get usePlatformView =>
       OS.isHarmony &&
-      _isHDRPlayback &&
+      (_isHDRPlayback || _directRenderVo != null) &&
       !isPipMode &&
       !_isInInAppPip;
 
@@ -648,6 +666,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
   /// 杜比视界 → HDR10）渲染路径并没有变，只看 [_usesPlatformView] 会以为无事
   /// 发生，于是新片源顶着上一档的信令上屏，类型报错。
   String? _appliedHdrMode;
+
+  /// 当前播放器实际使用的 vo（直显时 `ohcodec_embed`，否则 null → gpu-next）。
+  /// vo 只随 VideoController 创建固定，开关变化靠它对比触发重建。
+  String? _appliedVo;
 
   /// 色调映射用的目标屏幕峰值亮度（nit），取自设置「HDR 峰值亮度」。
   ///
@@ -1483,6 +1505,10 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (autosync != '0') {
       opt['autosync'] = autosync;
     }
+    if (_directRenderVo != null) {
+      // VRR 提示只有解码器输出直通显示系统才不被丢弃，重渲染路径下无效
+      opt['vd-lavc-ohos-vrr'] = 'yes';
+    }
 
     final player = Player(
       configuration: const PlayerConfiguration(
@@ -1504,6 +1530,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
         androidAttachSurfaceAfterVideoParameters: false,
         hwdec: hwdec,
         usePlatformView: usePlatformView,
+        vo: _directRenderVo,
         ohosHdrMode: ohosHdrMode,
         ohosHdrTargetPeak: ohosHdrTargetPeak,
       ),
@@ -1548,7 +1575,8 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     //    新片源会顶着上一档的 --ohos-hdr-mode 上屏，类型报错。
     if (player != null &&
         (_usesPlatformView != usePlatformView ||
-            _appliedHdrMode != ohosHdrMode)) {
+            _appliedHdrMode != ohosHdrMode ||
+            _appliedVo != _directRenderVo)) {
       _removeListeners();
       await _disposePlayerSafely(player);
       player = null;
@@ -1559,6 +1587,7 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
     if (player == null) {
       _usesPlatformView = usePlatformView;
       _appliedHdrMode = ohosHdrMode;
+      _appliedVo = _directRenderVo;
       player = await _initPlayer();
       if (_playerCount == 0) {
         _removeListeners();
