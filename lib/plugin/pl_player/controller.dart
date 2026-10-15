@@ -2727,10 +2727,13 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
       if (status) {
         if (PlatformUtils.isMobile) {
           hideSystemBar();
+          // 部分鸿蒙机型/形态下原生 setPreferredOrientation 可能长时间不
+          // 返回（退出路径同因已加超时）：无限等待会让 _fsProcessing 永久
+          // 卡 true，全屏按钮此后再也点不动，这里同样加超时兜底
           await changeOrientation(
             isVertical: isVertical,
             orientation: orientation,
-          );
+          )?.timeout(const Duration(milliseconds: 500), onTimeout: () {});
           if (OS.isHarmony && !HarmonyChannel.isWindowMode) {
             // 手动进全屏的目标方向：横屏时等视口真正变横屏再置全屏布局，
             // 避免全屏先在竖屏/中间尺寸渲染，导致比例错误和动画跳变。
@@ -2743,7 +2746,11 @@ class PlPlayerController with BlockConfigMixin, AudioNormalizationMixin {
                   .ratio => !isVertical && screenRatio >= kScreenRatio,
                   _ => false,
                 };
-            if (targetLandscape) {
+            // 方形屏（宽==高）旋转不改变视口尺寸，等待「宽>高」注定超时
+            // 600ms，白白拖慢点击全屏的响应；窗口不可能变横屏时直接跳过。
+            // screenRatio 为 0 的调用方（如直播间未赋值）保持原等待行为。
+            if (targetLandscape &&
+                !(screenRatio > 0 && screenRatio <= 1.0)) {
               await _waitForLandscapeViewport();
             }
           }
