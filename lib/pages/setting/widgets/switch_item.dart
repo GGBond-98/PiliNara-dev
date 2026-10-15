@@ -14,6 +14,7 @@ class SetSwitchItem extends StatefulWidget {
   final bool needReboot;
   final Widget? leading;
   final void Function(BuildContext context)? onTap;
+  final void Function(BuildContext context)? onLongPress;
   final EdgeInsetsGeometry? contentPadding;
   final TextStyle? titleStyle;
   final bool isSplit;
@@ -28,6 +29,7 @@ class SetSwitchItem extends StatefulWidget {
     this.needReboot = false,
     this.leading,
     this.onTap,
+    this.onLongPress,
     this.contentPadding,
     this.titleStyle,
     this.isSplit = false,
@@ -104,6 +106,9 @@ class _SetSwitchItemState extends State<SetSwitchItem> {
       contentPadding: widget.contentPadding,
       enabled: widget.onTap == null ? true : val,
       onTap: widget.onTap == null ? switchChange : () => widget.onTap!(context),
+      onLongPress: widget.onLongPress == null
+          ? null
+          : () => widget.onLongPress!(context),
       title: Text(widget.title, style: titleStyle),
       subtitle: widget.subtitle != null
           ? Text(widget.subtitle!, style: subTitleStyle)

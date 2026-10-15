@@ -8,7 +8,9 @@ abstract final class SettingBoxKey {
       enableHdsTopBar = 'enableHdsTopBar',
       hdsTabMaterialLevel = 'hdsTabMaterialLevel',
       enableHeroCoverAnimation = 'enableHeroCoverAnimation',
-      enableSmartGripSidebar = 'enableSmartGripSidebar';
+      enableSmartGripSidebar = 'enableSmartGripSidebar',
+      unfoldExpandFullScreen = 'unfoldExpandFullScreen',
+      unfoldExpandAnimDuration = 'unfoldExpandAnimDuration';
 
   static const String btmProgressBehavior = 'btmProgressBehavior',
       defaultVideoQa = 'defaultVideoQa',

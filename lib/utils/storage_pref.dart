@@ -1319,6 +1319,17 @@ abstract final class Pref {
   static bool get enableHeroCoverAnimation =>
       _setting.get(SettingBoxKey.enableHeroCoverAnimation, defaultValue: false);
 
+  /// 外屏全屏时展开进入内屏：全屏延续 + 画面从中间向两边扩张的过渡动画
+  static bool get unfoldExpandFullScreen =>
+      _setting.get(SettingBoxKey.unfoldExpandFullScreen, defaultValue: true);
+
+  /// 展开扩张过渡动画的时长（毫秒）。系统开合过渡约占用前 300ms，
+  /// 默认 1000 保证扩张段肉眼可见
+  static int get unfoldExpandAnimDuration => _setting.get(
+        SettingBoxKey.unfoldExpandAnimDuration,
+        defaultValue: 1000,
+      );
+
   static Transition get pageTransition =>
       Transition.values[_setting.get(
         SettingBoxKey.pageTransition,

@@ -492,7 +492,18 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     );
     _decorFullScreenWorker = ever(
       videoDetailController.plPlayerController.isFullScreen,
-      (_) => _syncDecorDark(),
+      (isFs) {
+        // 全屏会话一结束就失效「本次全屏期间窗口曾为横屏」标志。原先只在
+        // didChangeDependencies 里复位：折叠触发的自动退全屏完成后，方形
+        // 外屏不再有任何 metrics 变化，该方法不会重跑，残留的 true 会让
+        // 下一次全屏刚进入就被自动退出块/_layoutFullScreen 瞬态判定误杀
+        // （点全屏一闪即退，须退出页面重进才恢复）。ever 不依赖布局分支
+        // 与 metrics 事件，覆盖所有退出路径。
+        if (!isFs) {
+          _windowWasLandscapeInFullScreen = false;
+        }
+        _syncDecorDark();
+      },
     );
     // 竖屏视频判定翻转时会切换布局（如方形屏切到「左视频 + 右侧栏」分栏），
     // 顶栏底色随之改变（渐变顶栏 ↔ 黑色播放器），也要同步装饰栏按钮
@@ -740,6 +751,7 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     final isResume = state == .resumed;
     final ctr = videoDetailController.plPlayerController..visible = isResume;
     if (isResume) {
+      _startPendingUnfoldExpandIfNeeded();
       if (Platform.isAndroid && !showSystemBar_) {
         SystemChrome.setEnabledSystemUIMode(.immersiveSticky);
       }
@@ -751,6 +763,153 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
       introController.cancelTimer();
       ctr.showDanmaku = false;
     }
+  }
+
+  Size? _lastWindowSize;
+
+  /// 展开延续全屏：画面从旧窗口尺寸向新窗口扩张的过渡动画是否进行中
+  bool _unfoldExpandActive = false;
+  double _unfoldExpandStartScale = 1.0;
+
+  /// HDR 平台视图路径的遮罩挖孔过渡：视频不参与 Transform，用黑底
+  /// 遮罩中央孔洞从旧画面尺寸扩张到全屏
+  bool _unfoldExpandIsHoleReveal = false;
+  Rect _unfoldExpandHoleStart = Rect.zero;
+  Rect _unfoldExpandHoleEnd = Rect.zero;
+
+  /// 锁屏遮挡期间（非 resumed）暂存的展开过渡参数，回前台后再启动
+  Size? _pendingUnfoldOldSize;
+  Size? _pendingUnfoldNewSize;
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (!mounted) return;
+    final view = View.of(context);
+    final size = view.physicalSize / view.devicePixelRatio;
+    final last = _lastWindowSize;
+    _lastWindowSize = size;
+    // 旋转不改变最短边；最短边突变＝显示切换（Pura X 折叠/展开）。
+    if (last == null ||
+        (last.shortestSide - size.shortestSide).abs() <= 20 ||
+        !isFullScreen ||
+        (OS.isHarmony && HarmonyChannel.isWindowMode)) {
+      return;
+    }
+    // 展开（切到内屏，窗口变大）：全屏始终延续，永不自动退出。注意外屏
+    // 进全屏时已把窗口方向锁成横屏，展开后内屏窗口多为横屏（宽>高），
+    // 这正是合法的横屏全屏态，不能拿「宽>高」当拦截条件（否则动画和
+    // 退出都会被吞掉）。开关只决定是否播放画面从旧尺寸向新窗口扩张的
+    // 过渡动画（时长在设置中长按开关调节）
+    if (size.shortestSide > last.shortestSide) {
+      if (OS.isHarmony && Pref.unfoldExpandFullScreen) {
+        _startUnfoldExpandAnimation(oldSize: last, newSize: size);
+      } else {
+        debugPrint('[unfoldExpand] unfold: keep fullscreen, no animation');
+      }
+      return;
+    }
+    // 折叠（切到外屏）：全屏状态跨显示切换会损坏（外屏近方形窗口下
+    // _layoutFullScreen 判为瞬态渲染非全屏，isFullScreen 却仍为 true，
+    // 全屏按钮随之失灵），直接退出全屏回到确定状态
+    debugPrint('[unfoldExpand] fold: exit fullscreen');
+    _pendingUnfoldOldSize = null;
+    _pendingUnfoldNewSize = null;
+    if (_unfoldExpandActive) {
+      setState(() => _unfoldExpandActive = false);
+    }
+    videoDetailController.plPlayerController.triggerFullScreen(status: false);
+  }
+
+  /// 全屏跨显示展开时，把画面从旧窗口尺寸扩张回新窗口的过渡。
+  /// 纹理路径：整页等比放大（视频 contain 且居中，新旧视频矩形同比例
+  /// 同中心，缩放即「从中间往两边扩张」）；HDR 平台视图（XComponent）
+  /// 不参与 Transform 绘制变换，改用黑底遮罩中央孔洞从旧画面尺寸扩到
+  /// 全屏，视频原位不动，观感同样是画面从中间向外扩张。
+  /// 展开发生在锁屏遮挡（非 resumed）期间时先暂存参数，回前台再播，
+  /// 避免过渡在看不见的帧里悄悄播完。
+  void _startUnfoldExpandAnimation({
+    required Size oldSize,
+    required Size newSize,
+  }) {
+    final pl = videoDetailController.plPlayerController;
+    debugPrint('[unfoldExpand] start: old=$oldSize, new=$newSize, '
+        'platformView=${pl.usePlatformView}, lifecycle=$_lifecycleState');
+    if (_lifecycleState != AppLifecycleState.resumed) {
+      _pendingUnfoldOldSize = oldSize;
+      _pendingUnfoldNewSize = newSize;
+      debugPrint('[unfoldExpand] deferred until resumed');
+      return;
+    }
+    // 实际显示画幅比例：强制比例优先，否则取视频原生宽高比
+    final fitAspect = pl.videoFit.value.aspectRatio;
+    final rect = pl.videoController?.rect.value;
+    final aspect = fitAspect ??
+        (rect != null && rect.width > 1 && rect.height > 1
+            ? rect.width / rect.height
+            : null);
+    final holeReveal = pl.usePlatformView;
+    setState(() {
+      _unfoldExpandActive = true;
+      _unfoldExpandIsHoleReveal = holeReveal;
+      if (holeReveal) {
+        // 孔洞从「旧画面视频矩形（contain 进旧窗口）」扩到整个新窗口
+        final double holeW;
+        final double holeH;
+        if (aspect != null && aspect > 0) {
+          final a = aspect;
+          if (a > oldSize.width / oldSize.height) {
+            holeW = oldSize.width;
+            holeH = oldSize.width / a;
+          } else {
+            holeH = oldSize.height;
+            holeW = oldSize.height * a;
+          }
+        } else {
+          final o = oldSize.width / oldSize.height;
+          if (o > newSize.width / newSize.height) {
+            holeW = newSize.width;
+            holeH = newSize.width / o;
+          } else {
+            holeH = newSize.height;
+            holeW = newSize.height * o;
+          }
+        }
+        _unfoldExpandHoleStart = Rect.fromCenter(
+          center: newSize.center(Offset.zero),
+          width: holeW,
+          height: holeH,
+        );
+        _unfoldExpandHoleEnd = Offset.zero & newSize;
+      } else {
+        double start;
+        if (aspect != null && aspect > 0) {
+          // 闭包捕获需要非空提升：aspect 经 final 声明在分支内已收紧为 double
+          final a = aspect;
+          double fitHeight(Size s) =>
+              a > s.width / s.height ? s.width / a : s.height;
+          start = fitHeight(oldSize) / fitHeight(newSize);
+        } else {
+          start = oldSize.width / newSize.width;
+        }
+        _unfoldExpandStartScale = start.clamp(0.05, 0.98);
+      }
+    });
+    debugPrint('[unfoldExpand] armed: holeReveal=$holeReveal, '
+        'scale=${_unfoldExpandStartScale.toStringAsFixed(3)}, '
+        'hole=$_unfoldExpandHoleStart');
+  }
+
+  /// 回前台时启动被暂存的展开过渡（见 [_startUnfoldExpandAnimation]）
+  void _startPendingUnfoldExpandIfNeeded() {
+    final pendingOld = _pendingUnfoldOldSize;
+    final pendingNew = _pendingUnfoldNewSize;
+    if (pendingOld == null || pendingNew == null) return;
+    _pendingUnfoldOldSize = null;
+    _pendingUnfoldNewSize = null;
+    if (!isFullScreen) return;
+    debugPrint('[unfoldExpand] resumed: start deferred animation');
+    _startUnfoldExpandAnimation(oldSize: pendingOld, newSize: pendingNew);
   }
 
   @override
@@ -1305,6 +1464,11 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
     videoDetailController.plPlayerController.screenRatio = maxHeight / maxWidth;
 
     final shortestSide = size.shortestSide;
+    // didChangeMetrics 的折叠/展开检测依赖窗口基线，但它只在系统 metrics
+    // 变化时运行：外屏方形窗下进入全屏不产生任何 metrics 事件，基线一直
+    // 为 null，展开时的首个事件会因「无基线」被跳过。这里在依赖注入时
+    // 兜底初始化基线；旋转不改变最短边，不影响既有判定。
+    _lastWindowSize ??= size;
     final minVideoHeight = shortestSide / Style.aspectRatio16x9;
     final maxVideoHeight = max(size.longestSide * 0.65, shortestSide);
     videoDetailController
@@ -2351,6 +2515,63 @@ class _VideoDetailPageVState extends State<VideoDetailPageV>
         onSkipSegment: videoDetailController.onSkipSegment,
         child: child,
       );
+    }
+    // 展开延续全屏的扩张过渡。纹理路径：黑底之上把整页从旧画面尺寸等比
+    // 放大回新窗口（视频 contain 居中，缩放即「从中间往两边扩张」）；
+    // HDR 平台视图路径：视频原位不动，黑底遮罩中央孔洞从旧画面尺寸扩
+    // 到全屏，观感一致。动画结束撤掉包装恢复常规渲染
+    if (_unfoldExpandActive) {
+      if (_unfoldExpandIsHoleReveal) {
+        child = Stack(
+          fit: StackFit.passthrough,
+          children: [
+            child,
+            Positioned.fill(
+              child: IgnorePointer(
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween<double>(begin: 0, end: 1),
+                  duration: Duration(milliseconds: Pref.unfoldExpandAnimDuration),
+                  curve: Curves.easeOutCubic,
+                  onEnd: () {
+                    debugPrint('[unfoldExpand] hole reveal done');
+                    if (mounted) {
+                      setState(() => _unfoldExpandActive = false);
+                    }
+                  },
+                  builder: (context, t, _) => ClipPath(
+                    clipper: _UnfoldHoleClipper(
+                      Rect.lerp(
+                        _unfoldExpandHoleStart,
+                        _unfoldExpandHoleEnd,
+                        t,
+                      )!,
+                    ),
+                    child: const ColoredBox(color: Colors.black),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      } else {
+        child = ColoredBox(
+          color: Colors.black,
+          child: TweenAnimationBuilder<double>(
+            tween: Tween<double>(begin: _unfoldExpandStartScale, end: 1.0),
+            duration: Duration(milliseconds: Pref.unfoldExpandAnimDuration),
+            curve: Curves.easeOutCubic,
+            onEnd: () {
+              debugPrint('[unfoldExpand] scale animation done');
+              if (mounted) {
+                setState(() => _unfoldExpandActive = false);
+              }
+            },
+            builder: (context, scale, child) =>
+                Transform.scale(scale: scale, child: child),
+            child: child,
+          ),
+        );
+      }
     }
     final page = videoDetailController.plPlayerController.darkVideoPage
         ? Theme(data: theme, child: child)
@@ -3552,4 +3773,23 @@ class NoOverscrollBehavior extends MaterialScrollBehavior {
   ) {
     return child;
   }
+}
+
+/// 展开过渡的遮罩挖孔：全屏黑底遮罩中央挖出 [hole] 矩形孔洞
+/// （evenOdd 填充），孔洞随动画从旧画面尺寸扩张到全屏
+class _UnfoldHoleClipper extends CustomClipper<Path> {
+  _UnfoldHoleClipper(this.hole);
+
+  final Rect hole;
+
+  @override
+  Path getClip(Size size) {
+    return Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRect(Offset.zero & size)
+      ..addRect(hole);
+  }
+
+  @override
+  bool shouldReclip(_UnfoldHoleClipper oldClipper) => oldClipper.hole != hole;
 }

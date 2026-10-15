@@ -188,6 +188,7 @@ class SwitchModel extends SettingsModel {
   final ValueChanged<bool>? onChanged;
   final bool needReboot;
   final void Function(BuildContext context)? onTap;
+  final void Function(BuildContext context)? onLongPress;
 
   const SwitchModel({
     super.subtitle,
@@ -200,6 +201,7 @@ class SwitchModel extends SettingsModel {
     this.onChanged,
     this.needReboot = false,
     this.onTap,
+    this.onLongPress,
   });
 
   const SwitchModel.split({
@@ -208,6 +210,7 @@ class SwitchModel extends SettingsModel {
     this.needReboot = false,
     this.onChanged,
     this.onTap,
+    this.onLongPress,
   }) : title = null;
 
   @override
@@ -225,6 +228,7 @@ class SwitchModel extends SettingsModel {
     needReboot: needReboot,
     leading: leading,
     onTap: onTap,
+    onLongPress: onLongPress,
     contentPadding: contentPadding,
     titleStyle: titleStyle,
   );
