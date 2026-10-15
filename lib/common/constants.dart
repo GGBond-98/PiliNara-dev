@@ -12,6 +12,9 @@ abstract final class Constants {
   static const upstreamCodeUrl = 'https://github.com/bggRGjQaUbCoE/PiliPlus';
   static const pilinaraCodeUrl = 'https://github.com/Starfallan/PiliNara';
 
+  /// 维护 fork：版本更新检查（releases / ohos 分支提交）指向此仓库
+  static const forkCodeUrl = 'https://github.com/GGBond-98/PiliNara-dev';
+
 
   // 27eb53fc9058f8c3  移动端 Android
   // 4409e2ce8ffd12b8  HD版

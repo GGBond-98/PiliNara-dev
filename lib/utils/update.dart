@@ -56,7 +56,7 @@ abstract final class Update {
           DateTime.parse(data['created_at']).millisecondsSinceEpoch ~/ 1000;
       final latestTag = data['tag_name'];
       final latestHash = (await Request().get(
-        'https://api.github.com/repos/dev4harmony/PiliNara/git/refs/tags/$latestTag',
+        'https://api.github.com/repos/GGBond-98/PiliNara-dev/git/refs/tags/$latestTag',
       )).data['object']['sha'];
       if (BuildConfig.buildTime >= latest ||
           BuildConfig.commitHash == latestHash) {
@@ -95,7 +95,7 @@ abstract final class Update {
                       Text('${data['body']}'),
                       TextButton(
                         onPressed: () => PageUtils.launchURL(
-                          '${Constants.sourceCodeUrl}/commits/ohos', // 鸿蒙版ohos分支
+                          '${Constants.forkCodeUrl}/commits/ohos', // 鸿蒙版ohos分支
                         ),
                         child: Text(
                           "点此查看完整更新(即commit)内容",
@@ -187,7 +187,7 @@ abstract final class Update {
       }
     } catch (e) {
       if (kDebugMode) debugPrint('download error: $e');
-      PageUtils.launchURL('${Constants.sourceCodeUrl}/releases/latest');
+      PageUtils.launchURL('${Constants.forkCodeUrl}/releases/latest');
     }
   }
 
