@@ -5,6 +5,7 @@ import 'package:PiliPlus/common/widgets/pair.dart';
 import 'package:PiliPlus/utils/device_utils.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:webdav_client/webdav_client.dart' as webdav;
 
@@ -76,7 +77,8 @@ class WebDav {
     return 'piliplus_settings_${DeviceUtils.platformName}.json';
   }
 
-  Future<void> backup() async {
+  /// [silent] 为 true 时静默执行（自动同步用）：不弹 toast，失败仅日志
+  Future<void> backup({bool silent = false}) async {
     // Keep the payload bound to the same settings snapshot as the connection.
     final config = _getConfig();
     final data = GStorage.exportAllSettings();
@@ -84,6 +86,10 @@ class WebDav {
     try {
       client = await _connect(config);
     } catch (e) {
+      if (silent) {
+        if (kDebugMode) debugPrint('webdav silent backup failed: $e');
+        return;
+      }
       SmartDialog.showToast('备份失败，请检查配置: $e');
       return;
     }
@@ -93,8 +99,14 @@ class WebDav {
         await client.remove(path);
       } catch (_) {}
       await client.write(path, utf8.encode(data));
-      SmartDialog.showToast('备份成功');
+      if (!silent) {
+        SmartDialog.showToast('备份成功');
+      }
     } catch (e) {
+      if (silent) {
+        if (kDebugMode) debugPrint('webdav silent backup failed: $e');
+        return;
+      }
       SmartDialog.showToast('备份失败: $e');
     }
   }

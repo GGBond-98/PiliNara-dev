@@ -4,6 +4,7 @@ import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/pages/webdav/onedrive.dart';
 import 'package:PiliPlus/pages/webdav/webdav.dart';
+import 'package:PiliPlus/services/settings_sync_service.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
@@ -28,7 +29,18 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
   static const _modeWebDav = 'webdav';
   static const _modeOneDrive = 'onedrive';
 
+  static const _intervalOptions = [
+    (label: '15分钟', minutes: 15),
+    (label: '30分钟', minutes: 30),
+    (label: '1小时', minutes: 60),
+    (label: '6小时', minutes: 360),
+    (label: '12小时', minutes: 720),
+    (label: '每天', minutes: 1440),
+  ];
+
   String _mode = Pref.syncMode == _modeOneDrive ? _modeOneDrive : _modeWebDav;
+  String _autoSync = Pref.autoSyncMode;
+  int _autoSyncInterval = Pref.autoSyncInterval;
   final _uriCtr = TextEditingController(text: Pref.webdavUri);
   final _usernameCtr = TextEditingController(text: Pref.webdavUsername);
   final _passwordCtr = TextEditingController(text: Pref.webdavPassword);
@@ -252,6 +264,58 @@ class _WebDavSettingPageState extends State<WebDavSettingPage> {
                   ),
                 ],
               ),
+              const SizedBox(height: 20),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: SettingsSyncService.modeManual,
+                    label: Text('手动同步'),
+                  ),
+                  ButtonSegment(
+                    value: SettingsSyncService.modeOnChange,
+                    label: Text('修改后同步'),
+                  ),
+                  ButtonSegment(
+                    value: SettingsSyncService.modeScheduled,
+                    label: Text('定时同步'),
+                  ),
+                ],
+                selected: {_autoSync},
+                onSelectionChanged: (selected) {
+                  setState(() => _autoSync = selected.first);
+                  GStorage.setting.put(SettingBoxKey.autoSyncMode, _autoSync);
+                },
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '自动同步静默执行：修改后同步在设置变更 5 秒后备份，'
+                '定时同步按所选间隔备份',
+                style: TextStyle(
+                  color: ColorScheme.of(context).outline,
+                  fontSize: 12,
+                ),
+              ),
+              if (_autoSync == SettingsSyncService.modeScheduled) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    for (final option in _intervalOptions)
+                      ChoiceChip(
+                        label: Text(option.label),
+                        selected: _autoSyncInterval == option.minutes,
+                        onSelected: (_) {
+                          setState(() => _autoSyncInterval = option.minutes);
+                          GStorage.setting.put(
+                            SettingBoxKey.autoSyncInterval,
+                            option.minutes,
+                          );
+                        },
+                      ),
+                  ],
+                ),
+              ],
             ],
           ),
           Positioned(

@@ -19,6 +19,7 @@ import 'package:PiliPlus/services/download/download_service.dart';
 import 'package:PiliPlus/services/logger.dart';
 import 'package:PiliPlus/services/route_stack_observer.dart';
 import 'package:PiliPlus/services/service_locator.dart';
+import 'package:PiliPlus/services/settings_sync_service.dart';
 import 'package:PiliPlus/utils/cache_manager.dart';
 import 'package:PiliPlus/utils/calc_window_position.dart';
 import 'package:PiliPlus/utils/date_utils.dart';
@@ -123,6 +124,9 @@ void main() async {
     ..lazyPut(AccountService.new)
     ..lazyPut(DownloadService.new)
     ..put(DownloadCollectionService());
+
+  // 设置自动同步（修改后/定时）：监听 setting/video 盒变更
+  SettingsSyncService.instance.init();
 
   // 配置网络请求
   HttpOverrides.global = _CustomHttpOverrides();

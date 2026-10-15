@@ -7,6 +7,7 @@ import 'package:PiliPlus/utils/device_utils.dart';
 import 'package:PiliPlus/utils/storage.dart';
 import 'package:PiliPlus/utils/storage_key.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
 typedef DeviceLoginInfo = ({
@@ -292,7 +293,8 @@ class OneDrive {
     return name is String ? name : '';
   }
 
-  Future<void> backup() async {
+  /// [silent] 为 true 时静默执行（自动同步用）：不弹 toast，失败仅日志
+  Future<void> backup({bool silent = false}) async {
     try {
       final token = await _validToken();
       final data = utf8.encode(GStorage.exportAllSettings());
@@ -303,13 +305,23 @@ class OneDrive {
         body: data,
       );
       if (result.status >= 200 && result.status < 300) {
-        SmartDialog.showToast('备份成功');
+        if (!silent) {
+          SmartDialog.showToast('备份成功');
+        }
+      } else if (silent) {
+        if (kDebugMode) {
+          debugPrint('onedrive silent backup failed(${result.status})');
+        }
       } else {
         SmartDialog.showToast(
           '备份失败(${result.status}): ${_graphError(result)}',
         );
       }
     } catch (e) {
+      if (silent) {
+        if (kDebugMode) debugPrint('onedrive silent backup failed: $e');
+        return;
+      }
       SmartDialog.showToast('备份失败: $e');
     }
   }

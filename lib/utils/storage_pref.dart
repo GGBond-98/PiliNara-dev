@@ -1036,6 +1036,14 @@ abstract final class Pref {
   static String get syncMode =>
       _setting.get(SettingBoxKey.syncMode, defaultValue: 'webdav');
 
+  /// 自动同步模式：manual 手动 / onChange 修改后 / scheduled 定时
+  static String get autoSyncMode =>
+      _setting.get(SettingBoxKey.autoSyncMode, defaultValue: 'manual');
+
+  /// 定时同步间隔（分钟）
+  static int get autoSyncInterval =>
+      _setting.get(SettingBoxKey.autoSyncInterval, defaultValue: 60);
+
   static bool get showPgcTimeline =>
       _setting.get(SettingBoxKey.showPgcTimeline, defaultValue: true);
 

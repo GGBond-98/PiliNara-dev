@@ -260,7 +260,9 @@ abstract final class SettingBoxKey {
       onedriveAccessToken = 'onedriveAccessToken',
       onedriveRefreshToken = 'onedriveRefreshToken',
       onedriveExpiresAt = 'onedriveExpiresAt',
-      syncMode = 'syncMode';
+      syncMode = 'syncMode',
+      autoSyncMode = 'autoSyncMode',
+      autoSyncInterval = 'autoSyncInterval';
 
   static const String enableSponsorBlock = 'enableSponsorBlock',
       blockSettings = 'blockSettings',
