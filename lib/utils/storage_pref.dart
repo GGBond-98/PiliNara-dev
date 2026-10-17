@@ -483,9 +483,6 @@ abstract final class Pref {
     defaultValue: HwDecType.kHwdec,
   );
 
-  static bool get videoDirectRender =>
-      _setting.get(SettingBoxKey.videoDirectRender, defaultValue: false);
-
   static String get videoSync =>
       _setting.get(SettingBoxKey.videoSync, defaultValue: 'display-resample');
 

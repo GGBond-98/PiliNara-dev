@@ -91,15 +91,6 @@ List<SettingsModel> get experimentalSettings => [
       defaultVal: true,
       onLongPress: showUnfoldAnimDurationDialog,
     ),
-  if (OS.isHarmony)
-    SwitchModel(
-      title: '直显渲染（省电实验）',
-      subtitle: '硬解视频解码后直接送显，省去每帧 GL 重渲染与合成\nHDR、画中画、软解时自动回退；此模式下超分与画质滤镜无效，异常请关闭\n低帧率联动降 30Hz 因上游 mpv 未下发帧率暂未生效，待其修复',
-      leading: const Icon(Icons.bolt_outlined),
-      setKey: SettingBoxKey.videoDirectRender,
-      defaultVal: false,
-      onChanged: (_) => SmartDialog.showToast("下个视频生效"),
-    ),
   NormalModel(
     title: '应用接续',
     subtitle: '相同华为用户播放视频可在不同设备中快速流转视频。（始终开启）',

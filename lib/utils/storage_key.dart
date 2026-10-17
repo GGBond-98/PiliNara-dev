@@ -33,8 +33,6 @@ abstract final class SettingBoxKey {
       enableHDR = 'enableHDR',
       // HDR 色调映射用的面板峰值亮度（鸿蒙，nit）
       hdrPeakNits = 'hdrPeakNits',
-      // 直显渲染（鸿蒙）：SDR 硬解输出直接送显，跳过 GL 重渲染
-      videoDirectRender = 'videoDirectRender',
       videoSync = 'videoSync',
       autosync = 'autosync',
       p1080 = 'p1080',
