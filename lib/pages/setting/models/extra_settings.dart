@@ -55,6 +55,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import 'package:material_ui/material_ui.dart' hide RefreshIndicator;
+import 'package:os_type/os_type.dart';
 
 List<SettingsModel> get extraSettings => [
   if (PlatformUtils.isDesktop) ...[
@@ -307,11 +308,20 @@ List<SettingsModel> get extraSettings => [
     defaultVal: false,
     needReboot: true,
   ),
-  if (kDebugMode || Platform.isAndroid)
+  // Android：lavfi-complex 动态滤镜（dynaudnorm/loudnorm）完整生效。
+  // 鸿蒙：libmpv 的 FFmpeg 未编这两个滤镜（白名单构建），动态滤镜图
+  // 无法创建会直接导致视频加载失败，改走静态增益（详见
+  // AudioNormalizationMixin._ohosStaticGainExtras）。
+  if (kDebugMode || Platform.isAndroid || OS.isHarmony)
     NormalModel(
       title: '音量均衡',
       leading: const Icon(Icons.multitrack_audio),
       getSubtitle: () {
+        if (OS.isHarmony) {
+          return Pref.audioNormalization == '0'
+              ? '当前:「禁用」\n鸿蒙端为静态增益: 按B站实测响度归一，无响度数据时不生效'
+              : '当前:「启用: 静态增益」\n按B站实测响度归一音量，无响度数据时不生效';
+        }
         final audioNormalization = AudioNormalization.getTitleFromConfig(
           Pref.audioNormalization,
         );
@@ -322,9 +332,10 @@ List<SettingsModel> get extraSettings => [
           fallback =
               '，无参数时:「${AudioNormalization.getTitleFromConfig(fallback)}」';
         }
-        return '当前:「$audioNormalization」$fallback';
+        return '当前:「$audioNormalization」$fallback，长按快速选择方案1/2';
       },
-      onTap: audioNormalization,
+      onTap: OS.isHarmony ? ohosAudioNormalization : audioNormalization,
+      onLongPress: Platform.isAndroid ? quickAudioNormalization : null,
     ),
   NormalModel(
     title: '超分辨率',
@@ -775,6 +786,60 @@ Future<void> audioNormalization(
       }
       setState();
     }
+  }
+}
+
+/// 长按「音量均衡」快速选择预设方案。
+/// 方案1 = dynaudnorm：本地动态增益，不依赖服务器响度数据；
+/// 方案2 = loudnorm：优先使用 B 站服务器实测响度参数，
+/// 与点击流程一致，选中后继续配置无服务器数据时的兜底参数。
+Future<void> quickAudioNormalization(
+  BuildContext context,
+  VoidCallback setState,
+) async {
+  final res = await showDialog<String>(
+    context: context,
+    builder: (context) => SelectDialog<String>(
+      title: '音量均衡',
+      value: Pref.audioNormalization,
+      values: [
+        ('1', '方案1: ${AudioNormalization.dynaudnorm.title}'),
+        ('2', '方案2: ${AudioNormalization.loudnorm.title}'),
+      ],
+    ),
+  );
+  if (res != null && context.mounted) {
+    GStorage.setting.put(SettingBoxKey.audioNormalization, res);
+    if (res == '2') {
+      await audioNormalization(context, setState, fallback: true);
+    }
+    setState();
+  }
+}
+
+/// 鸿蒙端音量均衡：libmpv 未编 dynaudnorm/loudnorm 滤镜，
+/// 仅支持「B 站实测响度 + volume 滤镜」的静态增益（见
+/// AudioNormalizationMixin._ohosStaticGainExtras）。
+/// 启用时预存 '2'（loudnorm 预设值），待 libmpv 补编滤镜后
+/// 自动获得完整动态归一。
+Future<void> ohosAudioNormalization(
+  BuildContext context,
+  VoidCallback setState,
+) async {
+  final res = await showDialog<String>(
+    context: context,
+    builder: (context) => SelectDialog<String>(
+      title: '音量均衡',
+      value: Pref.audioNormalization == '0' ? '0' : '2',
+      values: const [
+        ('0', '禁用'),
+        ('2', '启用: 静态增益（基于B站实测响度）'),
+      ],
+    ),
+  );
+  if (res != null) {
+    GStorage.setting.put(SettingBoxKey.audioNormalization, res);
+    setState();
   }
 }
 

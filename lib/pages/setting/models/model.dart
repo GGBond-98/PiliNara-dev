@@ -136,6 +136,8 @@ class NormalModel extends SettingsModel {
   final ValueGetter<String>? getSubtitle;
   final Widget Function(ThemeData theme)? getTrailing;
   final void Function(BuildContext context, VoidCallback setState)? onTap;
+  final void Function(BuildContext context, VoidCallback setState)?
+  onLongPress;
 
   const NormalModel({
     super.subtitle,
@@ -147,6 +149,7 @@ class NormalModel extends SettingsModel {
     this.getSubtitle,
     this.getTrailing,
     this.onTap,
+    this.onLongPress,
   }) : assert(title != null || getTitle != null);
 
   const NormalModel.split({
@@ -159,6 +162,7 @@ class NormalModel extends SettingsModel {
     this.getSubtitle,
     this.getTrailing,
   }) : onTap = null,
+       onLongPress = null,
        assert(title != null || getTitle != null);
 
   @override
@@ -175,6 +179,7 @@ class NormalModel extends SettingsModel {
     leading: leading,
     getTrailing: getTrailing,
     onTap: onTap,
+    onLongPress: onLongPress,
     contentPadding: contentPadding,
     titleStyle: titleStyle,
   );

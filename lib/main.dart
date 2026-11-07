@@ -43,6 +43,7 @@ import 'package:collection/collection.dart';
 import 'package:dynamic_color/dynamic_color.dart' show DynamicColorPlugin;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' show DeviceGestureSettings;
+import 'package:flutter/rendering.dart' show OhosFlexOverflowStrategy;
 import 'package:flutter/services.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -102,9 +103,11 @@ Future<void> _initAppPath() async {
 }
 
 void main() async {
+  OhosFlexOverflowStrategy.isFlexOverflowEnabled = false;
   ScaledWidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
   if (OS.isHarmony) await OS.initHarmonyDeviceType();
+  HarmonyChannel.initOuterScreenDpiScale();
   await _initAppPath();
   try {
     await GStorage.init();

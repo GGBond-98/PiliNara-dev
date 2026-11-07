@@ -9,6 +9,7 @@ class NormalItem extends StatefulWidget {
   final Widget? leading;
   final Widget Function(ThemeData theme)? getTrailing;
   final void Function(BuildContext context, VoidCallback setState)? onTap;
+  final void Function(BuildContext context, VoidCallback setState)? onLongPress;
   final EdgeInsetsGeometry? contentPadding;
   final TextStyle? titleStyle;
 
@@ -20,6 +21,7 @@ class NormalItem extends StatefulWidget {
     this.leading,
     this.getTrailing,
     this.onTap,
+    this.onLongPress,
     this.contentPadding,
     this.titleStyle,
     super.key,
@@ -47,6 +49,9 @@ class _NormalItemState extends State<NormalItem> {
       onTap: widget.onTap == null
           ? null
           : () => widget.onTap!(context, refresh),
+      onLongPress: widget.onLongPress == null
+          ? null
+          : () => widget.onLongPress!(context, refresh),
       title: Text(
         widget.title ?? widget.getTitle!(),
         style: widget.titleStyle ?? theme.textTheme.titleMedium!,

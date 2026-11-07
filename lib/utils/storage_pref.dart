@@ -398,6 +398,11 @@ abstract final class Pref {
   static double get recommendCardWidth =>
       _setting.get(SettingBoxKey.recommendCardWidth, defaultValue: 240.0);
 
+  /// 首页推荐网格列数：0 = 自动（按 [recommendCardWidth] 推算），
+  /// 2/3 = 内屏双指缩放固定的列数
+  static int get rcmdGridColumns =>
+      _setting.get(SettingBoxKey.rcmdGridColumns, defaultValue: 0);
+
   static UpPanelPosition get upPanelPosition =>
       UpPanelPosition.values[_setting.get(
         SettingBoxKey.upPanelPosition,

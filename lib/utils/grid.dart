@@ -234,3 +234,59 @@ class SliverGridDelegateWithMaxCrossAxisExtent extends SliverGridDelegate {
     return flag;
   }
 }
+
+/// 固定列数版的 [SliverGridDelegateWithExtentAndRatio]：列数不随窗口
+/// 宽度推算（首页推荐双指缩放固定 2/3 列用）。格高语义与之一致：
+/// 「封面按 [childAspectRatio] 的高度 + [mainAxisExtent] 的文字区高度」，
+/// 而系统 SliverGridDelegateWithFixedCrossAxisCount 的 mainAxisExtent
+/// 是整格高度，直接套用会把封面+标题压进 90dp 里，标题被裁没。
+class SliverGridDelegateWithFixedCrossAxisCountAndExtent
+    extends SliverGridDelegate {
+  SliverGridDelegateWithFixedCrossAxisCountAndExtent({
+    required this.crossAxisCount,
+    this.mainAxisSpacing = 0.0,
+    this.crossAxisSpacing = 0.0,
+    this.childAspectRatio = 1.0,
+    this.mainAxisExtent = 0.0,
+  }) : assert(crossAxisCount > 0),
+       assert(mainAxisSpacing >= 0),
+       assert(crossAxisSpacing >= 0),
+       assert(childAspectRatio > 0),
+       assert(mainAxisExtent >= 0);
+
+  final int crossAxisCount;
+  final double mainAxisSpacing;
+  final double crossAxisSpacing;
+  final double childAspectRatio;
+  final double mainAxisExtent;
+
+  @override
+  SliverGridLayout getLayout(SliverConstraints constraints) {
+    assert(constraints.crossAxisExtent > 0.0);
+    final double usableCrossAxisExtent = max(
+      0.0,
+      constraints.crossAxisExtent - crossAxisSpacing * (crossAxisCount - 1),
+    );
+    final double childCrossAxisExtent = usableCrossAxisExtent / crossAxisCount;
+    final double childMainAxisExtent =
+        childCrossAxisExtent / childAspectRatio + mainAxisExtent;
+    return SliverGridRegularTileLayout(
+      crossAxisCount: crossAxisCount,
+      mainAxisStride: childMainAxisExtent + mainAxisSpacing,
+      crossAxisStride: childCrossAxisExtent + crossAxisSpacing,
+      childMainAxisExtent: childMainAxisExtent,
+      childCrossAxisExtent: childCrossAxisExtent,
+      reverseCrossAxis: axisDirectionIsReversed(constraints.crossAxisDirection),
+    );
+  }
+
+  @override
+  bool shouldRelayout(
+    covariant SliverGridDelegateWithFixedCrossAxisCountAndExtent oldDelegate,
+  ) =>
+      oldDelegate.crossAxisCount != crossAxisCount ||
+      oldDelegate.mainAxisSpacing != mainAxisSpacing ||
+      oldDelegate.crossAxisSpacing != crossAxisSpacing ||
+      oldDelegate.childAspectRatio != childAspectRatio ||
+      oldDelegate.mainAxisExtent != mainAxisExtent;
+}

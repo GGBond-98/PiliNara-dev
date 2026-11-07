@@ -120,6 +120,7 @@ class _HomePageState extends CommonPageState<HomePage>
             child: onBuild(
               tabBarView(
                 controller: _homeController.tabController,
+                physics: homeTabBarScrollPhysics,
                 children: _homeController.tabs.map((e) => e.page).toList(),
               ),
             ),

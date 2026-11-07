@@ -4,6 +4,8 @@ import 'package:PiliPlus/common/widgets/scale_app.dart';
 import 'package:PiliPlus/harmony_adapt/continuation.dart';
 import 'package:PiliPlus/models/common/harmony/hds_material_level.dart';
 import 'package:PiliPlus/models/common/nav_bar_config.dart';
+import 'package:PiliPlus/plugin/pl_player/models/fullscreen_mode.dart'
+    show kScreenRatio;
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -71,6 +73,62 @@ abstract class HarmonyChannel {
         debugPrint('[HDRCAP] query failed, capability stays unknown: $e');
       }
     }
+  }
+
+  // —— Pura X 外屏全局缩小 ——
+
+  /// 外屏全局 DPI 缩放系数。经引擎 flutter/displaymetrics 通道
+  /// （updateDpiScale）把全局 devicePixelRatio 乘上该系数（0.85 即
+  /// dpr 3.0 → 2.55）：外屏逻辑视口从 ≈327dp 放大到 ≈384dp，控件物理
+  /// 尺寸缩小 15%，小屏下信息密度更高。恢复用 -1.0（引擎约定的
+  /// DPI_SCALE_RESET）。
+  static const double _outerScreenDpiScale = 0.85;
+  static const double _dpiScaleReset = -1.0;
+
+  /// null = 尚未同步过：启动后第一次无条件同步，顺带纠正引擎侧可能
+  /// 残留的缩放状态（如上次会话遗留的缩小密度）。
+  static bool? _outerScreenDpiApplied;
+
+  static _OuterScreenDpiObserver? _outerScreenDpiObserver;
+
+  /// 注册全局 metrics 观察者并立即同步一次外屏全局缩小。在 main() 里
+  /// runApp 之前调用，外屏首帧即按缩小后的密度布局，避免启动闪变。
+  static void initOuterScreenDpiScale() {
+    if (!OS.isHarmony || _outerScreenDpiObserver != null) return;
+    _outerScreenDpiObserver = _OuterScreenDpiObserver();
+    WidgetsBinding.instance.addObserver(_outerScreenDpiObserver!);
+    _syncOuterScreenDpiScale();
+  }
+
+  /// 当前是否处于小尺寸近方形窗口（如 Pura X 外屏 980×980px@3x ≈
+  /// 327×327dp）。判据与 video/view.dart 的 _isSmallNearSquareWindow 对齐：
+  /// 宽高比 ∈ [0.85, kScreenRatio) 且宽度 < 500dp。宽度阈值用「未缩放的
+  /// 自然宽度」计算，避免缩小生效后越过阈值来回震荡（外屏 327dp 缩放后
+  /// ≈384dp，仍 < 500dp）。
+  static bool _isOuterScreenWindow() {
+    final view = WidgetsBinding.instance.platformDispatcher.implicitView;
+    if (view == null) return false;
+    final logical = view.physicalSize / view.devicePixelRatio;
+    if (logical.isEmpty) return false;
+    final aspect = logical.width / logical.height;
+    final naturalWidth = logical.width *
+        (_outerScreenDpiApplied == true ? _outerScreenDpiScale : 1.0);
+    return aspect >= 0.85 && aspect < kScreenRatio && naturalWidth < 500;
+  }
+
+  /// 按当前窗口形态同步外屏全局缩小：外屏缩小、其余窗口恢复系统密度。
+  /// 显示切换（折叠/展开）、窗口尺寸或密度变化时由
+  /// [_OuterScreenDpiObserver.didChangeMetrics] 驱动重算。
+  static void _syncOuterScreenDpiScale() {
+    final shouldShrink = _isOuterScreenWindow();
+    if (_outerScreenDpiApplied == shouldShrink) return;
+    _outerScreenDpiApplied = shouldShrink;
+    SystemChannels.displayMetrics.invokeMethod<void>(
+      'updateDpiScale',
+      <String, dynamic>{
+        'dpiScale': shouldShrink ? _outerScreenDpiScale : _dpiScaleReset,
+      },
+    );
   }
 
   static final MethodChannel _channel = const MethodChannel('harmonyChannel')
@@ -647,5 +705,14 @@ abstract class HarmonyChannel {
 
   static void _setDecorButtonDark(bool dark) {
     _channel.invokeMethod('setDecorButtonDark', {'dark': dark});
+  }
+}
+
+/// 全局窗口 metrics 观察者：显示切换（Pura X 折叠/展开）、窗口尺寸或
+/// 密度变化时重新同步外屏全局缩小状态。
+class _OuterScreenDpiObserver with WidgetsBindingObserver {
+  @override
+  void didChangeMetrics() {
+    HarmonyChannel._syncOuterScreenDpiScale();
   }
 }
