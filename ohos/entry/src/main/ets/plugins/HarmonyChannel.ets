@@ -7,7 +7,6 @@ import { formProvider } from "@kit.FormKit";
 import { motion } from "@kit.MultimodalAwarenessKit";
 import AbilityConstant from "@ohos.app.ability.AbilityConstant";
 import Want from "@ohos.app.ability.Want";
-import ConfigurationConstant from "@ohos.app.ability.ConfigurationConstant";
 import { backgroundTaskManager } from "@kit.BackgroundTasksKit";
 import window from "@ohos.window";
 import {
@@ -20,12 +19,9 @@ import {
 } from "@ohos/flutter_ohos";
 
 import display from "@ohos.display";
-
-const colorModeMap: Record<string, ConfigurationConstant.ColorMode> = {
-  "light": ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT,
-  "dark": ConfigurationConstant.ColorMode.COLOR_MODE_DARK,
-  "system": ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET,
-};
+import { appAppearance } from "../appearance/AppAppearance";
+import { windowChrome } from "../window/WindowChrome";
+import { SafeAreaInsets, WindowSnapshot, windowState } from "../window/WindowState";
 
 export default class HarmonyChannel implements FlutterPlugin {
   private channel: MethodChannel | null = null;
@@ -40,6 +36,19 @@ export default class HarmonyChannel implements FlutterPlugin {
   /// 由 Dart 侧就绪后主动拉取（getPendingContinuation），规避冷启动时
   /// Dart handler 尚未注册导致推送丢失的问题。
   private pendingContinuation: string | null = null;
+  /**
+   * 兼容旧通道 setFullScreenBars 用的序号与「会话 epoch」。
+   *
+   * 新链路（Dart SystemBars.sync）自带 revision/epoch；旧链路没有，这里补上，
+   * 两者都汇入 WindowState 的同一个状态机，晚到的旧命令不会覆盖新状态。
+   */
+  private barsRevision: number = 0;
+  private barsEpoch: number = Date.now() & 0x7fffffff;
+
+  private nextBarsRevision(): number {
+    this.barsRevision += 1;
+    return this.barsRevision;
+  }
 
   getUniqueClassName(): string {
     return "HarmonyChannel";
@@ -48,6 +57,15 @@ export default class HarmonyChannel implements FlutterPlugin {
   onAttachedToEngine(binding: FlutterPluginBinding): void {
     this.channel = new MethodChannel(binding.getBinaryMessenger(), "harmonyChannel");
     this.channel.setMethodCallHandler(this);
+    // 窗口级状态中心 → Flutter 的反向推送。窗口快照（自由窗口/小窗/受限窗口、
+    // 自绘标题带显隐）与安全区避让区都从 windowState 出来，推送名与 Dart 侧
+    // HarmonyChannel 的 handler 一一对应。
+    windowState.setSnapshotListener((snapshot: WindowSnapshot): void => {
+      this.channel?.invokeMethod("onWindowSnapshot", snapshot);
+    });
+    windowState.setSafeAreaListener((insets: SafeAreaInsets): void => {
+      this.channel?.invokeMethod("onSafeAreaChange", insets);
+    });
     // // 监听画面方向
     // display.on('change', () => {
     //   // 获取当前旋转角度
@@ -58,8 +76,8 @@ export default class HarmonyChannel implements FlutterPlugin {
 
   onDetachedFromEngine(binding: FlutterPluginBinding): void {
     this.channel?.setMethodCallHandler(null);
-    this.stopCutoutListener();
-    this.stopDecorListener();
+    windowState.setSnapshotListener(null);
+    windowState.setSafeAreaListener(null);
     this.stopFreeWindowModeListener();
     this.stopGripListener();
   }
@@ -177,333 +195,28 @@ export default class HarmonyChannel implements FlutterPlugin {
     }
   }
 
-  /**
-   * 摄像头挖孔（TYPE_CUTOUT）避让区上报。
-   *
-   * 鸿蒙 Flutter embedding（FlutterView.onAreaChange）算 viewPadding 时只读
-   * TYPE_SYSTEM（状态栏/导航栏）避让区，从不读 TYPE_CUTOUT：
-   * - 横屏时挖孔在左/右侧，TYPE_SYSTEM 的 leftRect/rightRect 为 0，
-   *   viewPadding.left/right 恒为 0，页面内容压到挖孔下面；
-   * - 竖屏隐藏状态栏（播放页全屏）后 TYPE_SYSTEM.topRect 归 0，
-   *   viewPadding.top 也归 0，挖孔仍在，顶部控件被遮。
-   * Android embedding 会把 cutout 并进 viewPadding，上上游代码都按这个语义
-   * 写。这里把窗口相对的 TYPE_CUTOUT 避让区（物理像素）交给 Dart，在根
-   * MediaQuery 里按边取 max 合并，见 Dart 侧 HarmonyChannel.cutoutInsets。
-   *
-   * 只在手机上做：手机前摄挖孔开在屏幕内，横屏时压住左侧控件、竖屏全屏时
-   * 压住顶部控件，必须避让。平板/2in1 的摄像头在边框上，系统虽然同样会报一
-   * 块 TYPE_CUTOUT 避让区，但按它避让只会平白让出一条空带——侧栏页签相对上方
-   * 头像/搜索错位（两者一个在 SafeArea 内一个不在）、播放页左侧多出一条底色
-   * 竖条。故非手机设备一律上报 0，Dart 侧 mergeCutout 原样返回 padding。
-   */
-  private static readonly cutoutEnabled: boolean = deviceInfo.deviceType === 'phone';
-  /**
-   * 挖孔矩形的下沿（物理像素，自然竖屏坐标系）。-1 = 尚未取到，0 = 无挖孔。
-   *
-   * 系统 TYPE_CUTOUT 避让区给的是一条"安全带"，高度按状态栏对齐（要让状态栏
-   * 文字整体避开挖孔），比挖孔本身低一截。顶栏照它避让就会在挖孔和标题之间
-   * 空出一块。boundingRects 给的是挖孔矩形本身，用它把避让收紧到刚好贴着挖
-   * 孔下沿。挖孔位置不随旋转变化，取一次缓存即可。
-   */
-  private static exactCutoutBottom: number = -1;
-  private cutoutListening: boolean = false;
-  private lastCutout: Record<string, number> | null = null;
-  private cutoutAvoidAreaCallback = (data: window.AvoidAreaOptions): void => {
-    if (data.type === window.AvoidAreaType.TYPE_CUTOUT) {
-      this.pushCutout(this.cutoutToRecord(data.area));
-    }
-  };
-  // 旋转/窗口尺寸变化后兜底重读一次：部分机型旋转时不会单独推送
-  // TYPE_CUTOUT 的 avoidAreaChange。
-  private cutoutSizeCallback = (_size: window.Size): void => {
-    this.pushCutout(this.readCutout());
-  };
-
-  /**
-   * 读一次挖孔矩形，缓存到 [exactCutoutBottom]。只认屏幕上半部的矩形（手机
-   * 前摄挖孔），下半部（个别机型的下巴避让）与顶部避让无关。
-   */
-  private async loadCutoutRects(): Promise<void> {
-    if (HarmonyChannel.exactCutoutBottom >= 0) {
-      return;
-    }
-    HarmonyChannel.exactCutoutBottom = 0;
-    try {
-      const disp = display.getDefaultDisplaySync();
-      const info = await disp.getCutoutInfo();
-      const half = disp.height / 2;
-      let bottom = 0;
-      for (const rect of info.boundingRects) {
-        if (rect.top < half) {
-          bottom = Math.max(bottom, rect.top + rect.height);
-        }
-      }
-      HarmonyChannel.exactCutoutBottom = bottom;
-      console.info("HarmonyChannel", `cutout boundingRect bottom=${bottom}px`);
-    } catch (err) {
-      console.error("HarmonyChannel", `getCutoutInfo failed: ${err}`);
-    }
-  }
-
-  /**
-   * 窗口是否正贴着自然竖屏的屏幕顶部：只有此时 [exactCutoutBottom]
-   * （自然竖屏、屏幕坐标系）才等于窗口坐标系里的挖孔下沿，可用来收紧避让。
-   * 旋转后 boundingRects 的坐标系各版本不一致，分屏/自由多窗时窗口也不在
-   * 屏幕顶部，这些情况一律退回系统避让区。
-   */
-  private canUseExactCutout(winTop: number): boolean {
-    if (HarmonyChannel.exactCutoutBottom <= 0 || winTop !== 0) {
-      return false;
-    }
-    try {
-      // display.Orientation.PORTRAIT === 0，即自然方向（手机为竖屏）
-      return display.getDefaultDisplaySync().rotation === 0;
-    } catch (err) {
-      console.error("HarmonyChannel", `getDefaultDisplaySync failed: ${err}`);
-      return false;
-    }
-  }
-
-  /**
-   * 把 TYPE_CUTOUT 避让区换算成"从窗口某条边到挖孔外沿"的安全距离。
-   *
-   * 系统给的 topRect/leftRect… 是**挖孔本身那个矩形**，不是安全距离：竖屏挖
-   * 孔并不贴着屏幕顶边，topRect.top 通常大于 0，只取 height 会少让出 top 这
-   * 一段。少的这一段在顶部控件上看不出来（挖孔居中，按钮在左右两侧），但
-   * 横穿整幅宽度的弹幕会正好从挖孔下沿飘过去。右/下两边同理：矩形左上角坐
-   * 标离对边的距离才是安全距离，取不到窗口尺寸时退化为矩形宽/高。
-   */
-  private cutoutToRecord(area: window.AvoidArea): Record<string, number> {
-    let winWidth = 0;
-    let winHeight = 0;
-    let winTop = -1;
-    try {
-      const winRect = this.lastWindow?.getWindowProperties().windowRect;
-      if (winRect) {
-        winWidth = winRect.width;
-        winHeight = winRect.height;
-        winTop = winRect.top;
-      }
-    } catch (err) {
-      console.error("HarmonyChannel", `getWindowProperties failed: ${err}`);
-    }
-    const avoidTop = area.topRect.height > 0 ? area.topRect.top + area.topRect.height : 0;
-    let top = avoidTop;
-    // 系统这条安全带按状态栏高度给，比挖孔低一截；能拿到挖孔矩形本身时收紧到
-    // 它的下沿，让竖屏全屏的顶栏/弹幕贴着挖孔。见 [exactCutoutBottom]。
-    if (top > 0 && this.canUseExactCutout(winTop)) {
-      top = Math.min(top, HarmonyChannel.exactCutoutBottom);
-    }
-    console.info("HarmonyChannel",
-      `cutout top: avoid=${avoidTop} exact=${HarmonyChannel.exactCutoutBottom}` +
-        ` winTop=${winTop} -> ${top}`);
-    const rec: Record<string, number> = {
-      'left': area.leftRect.width > 0 ? area.leftRect.left + area.leftRect.width : 0,
-      'top': top,
-      'right': area.rightRect.width > 0
-        ? (winWidth > 0 ? winWidth - area.rightRect.left : area.rightRect.width)
-        : 0,
-      'bottom': area.bottomRect.height > 0
-        ? (winHeight > 0 ? winHeight - area.bottomRect.top : area.bottomRect.height)
-        : 0,
-    };
-    return rec;
-  }
-
-  private readCutout(): Record<string, number> {
-    if (!HarmonyChannel.cutoutEnabled) {
-      const zero: Record<string, number> = { 'left': 0, 'top': 0, 'right': 0, 'bottom': 0 };
-      return zero;
-    }
-    try {
-      const area = this.lastWindow?.getWindowAvoidArea(window.AvoidAreaType.TYPE_CUTOUT);
-      if (area) {
-        return this.cutoutToRecord(area);
-      }
-    } catch (err) {
-      console.error("HarmonyChannel", `getWindowAvoidArea(TYPE_CUTOUT) failed: ${err}`);
-    }
-    const zero: Record<string, number> = { 'left': 0, 'top': 0, 'right': 0, 'bottom': 0 };
-    return zero;
-  }
-
-  private pushCutout(cutout: Record<string, number>): void {
-    const last = this.lastCutout;
-    if (last != null &&
-      last['left'] === cutout['left'] && last['top'] === cutout['top'] &&
-      last['right'] === cutout['right'] && last['bottom'] === cutout['bottom']) {
-      return;
-    }
-    this.lastCutout = cutout;
-    this.channel?.invokeMethod("onCutoutAvoidAreaChange", cutout);
-  }
-
-  private async startCutoutListener(): Promise<void> {
-    if (this.cutoutListening || !HarmonyChannel.cutoutEnabled) {
-      return;
-    }
-    this.cutoutListening = true;
-    this.lastWindow ??= await window.getLastWindow(getContext());
-    await this.loadCutoutRects();
-    try {
-      this.lastWindow.on('avoidAreaChange', this.cutoutAvoidAreaCallback);
-      this.lastWindow.on('windowSizeChange', this.cutoutSizeCallback);
-    } catch (err) {
-      console.error("HarmonyChannel", `cutout listener failed: ${err}`);
-    }
-  }
-
-  private stopCutoutListener(): void {
-    if (!this.cutoutListening) {
-      return;
-    }
-    this.cutoutListening = false;
-    try {
-      this.lastWindow?.off('avoidAreaChange', this.cutoutAvoidAreaCallback);
-      this.lastWindow?.off('windowSizeChange', this.cutoutSizeCallback);
-    } catch (err) {
-      console.error("HarmonyChannel", `cutout listener off failed: ${err}`);
-    }
-  }
-
-  /**
-   * 自由窗口（FLOATING：手机/平板小窗、平板自由多窗）顶部系统悬浮控件的避让
-   * 高度上报，物理像素。
-   *
-   * 原先靠 embedding：setEnabledSystemUIOverlays(['navigation']) 时它隐藏装饰
-   * 栏并把 viewPadding.top 钉成 getTitleButtonRect 高度。embedding 自
-   * af6c8ca176a（2026-09-08，3.41/3.44 均含）起在该路径上多了几处
-   * setPaddingTop(0)：小窗没有三键（rect 高度 0 / 不支持装饰栏）→ 直接钉 0，
-   * 不再回落到系统避让区；运行中才打开系统「自由多窗」时窗口状态仍是
-   * FLOATING，Dart 侧不会重发 overlays，钉住的 0 也没人刷新。结果顶部内容
-   * 压到系统悬浮控件下面。
-   *
-   * 这里不再依赖 embedding：自己读三键区域与 TYPE_SYSTEM 顶部避让区取 max，
-   * 变化时推给 Dart，在根 MediaQuery 里与 padding.top 取 max（见 Dart 侧
-   * HarmonyChannel.decorTopInset）。三键高度只在自由窗口下读；系统顶部避让区
-   * 任何窗口形态都报——与 embedding 正常算出的 viewPadding.top 同源，取 max
-   * 无副作用，只在 embedding 给出 0 时兜底（状态栏被隐藏时系统避让区本身
-   * 归 0，不会多让）。
-   */
-  private decorListening: boolean = false;
-  private lastDecorTop: number = -1;
-  private decorChangeCallback = (): void => {
-    this.pushDecorTop(this.readDecorTop());
-  };
-
-  private readDecorTop(): number {
-    const win = this.lastWindow;
-    if (!win) {
-      return 0;
-    }
-    let floating = false;
-    try {
-      floating = win.getWindowStatus() === window.WindowStatusType.FLOATING;
-    } catch (err) {
-      floating = false;
-    }
-    let buttonTop = 0;
-    if (floating) {
-      try {
-        // 小窗/不支持装饰栏的设备上会抛异常，按 0 处理
-        const rect = win.getTitleButtonRect();
-        if (rect && rect.height > 0) {
-          buttonTop = vp2px(rect.height);
-        }
-      } catch (err) {
-        buttonTop = 0;
-      }
-    }
-    let systemTop = 0;
-    try {
-      const area = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
-      if (area.topRect.top === 0 && area.topRect.height > 0) {
-        systemTop = area.topRect.height;
-      }
-    } catch (err) {
-      systemTop = 0;
-    }
-    const top = Math.max(buttonTop, systemTop);
-    // avoidAreaChange 对键盘等各类避让区都会触发，只在值变化时打日志
-    if (top !== this.lastDecorTop) {
-      console.info("HarmonyChannel", `decorTop: titleButton=${buttonTop} system=${systemTop}`);
-    }
-    return top;
-  }
-
-  private pushDecorTop(top: number): void {
-    if (this.lastDecorTop === top) {
-      return;
-    }
-    this.lastDecorTop = top;
-    const args: Record<string, number> = { 'top': top };
-    this.channel?.invokeMethod("onDecorTopInsetChange", args);
-  }
-
-  private async startDecorListener(): Promise<void> {
-    if (this.decorListening) {
-      return;
-    }
-    this.decorListening = true;
-    this.lastWindow ??= await window.getLastWindow(getContext());
-    const win = this.lastWindow;
-    // 逐个注册：windowTitleButtonRectChange 在不支持装饰栏的设备上会抛异常，
-    // 不能连累其余监听
-    try {
-      win.on('windowTitleButtonRectChange', this.decorChangeCallback);
-    } catch (err) {
-      console.warn("HarmonyChannel", `on windowTitleButtonRectChange skipped: ${err}`);
-    }
-    try {
-      win.on('windowStatusChange', this.decorChangeCallback);
-      win.on('avoidAreaChange', this.decorChangeCallback);
-      win.on('windowSizeChange', this.decorChangeCallback);
-    } catch (err) {
-      console.error("HarmonyChannel", `decor listener failed: ${err}`);
-    }
-  }
-
-  private stopDecorListener(): void {
-    if (!this.decorListening) {
-      return;
-    }
-    this.decorListening = false;
-    const win = this.lastWindow;
-    try {
-      win?.off('windowTitleButtonRectChange', this.decorChangeCallback);
-    } catch (err) {
-      // 注册时即未成功
-    }
-    try {
-      win?.off('windowStatusChange', this.decorChangeCallback);
-      win?.off('avoidAreaChange', this.decorChangeCallback);
-      win?.off('windowSizeChange', this.decorChangeCallback);
-    } catch (err) {
-      console.error("HarmonyChannel", `decor listener off failed: ${err}`);
-    }
-  }
-
   public getChannel(): MethodChannel | null {
     return this.channel;
   }
 
 
   /**
-   * 全屏/退出全屏时只切换系统栏显隐，不改窗口布局。
-   * 不要调用 setWindowLayoutFullScreen：它会改变 surface 尺寸，
-   * 导致 Flutter 视口变化，旋转进出全屏时画面跳动。
-   * 窗口布局保持主流程（main.dart 的 edgeToEdge）设置的普通布局。
+   * 全屏/退出全屏时只切换系统栏显隐，不改窗口布局（setWindowLayoutFullScreen 会改
+   * surface 尺寸，导致 Flutter 视口变化、旋转进出全屏时画面跳动）。
+   *
+   * 状态栏显隐会改 TYPE_SYSTEM 的 topRect，但部分机型不推送 avoidAreaChange，
+   * 故切换后主动重推一次。
    */
   async setFullScreenBars(fullscreen: boolean) {
-    this.lastWindow ??= await window.getLastWindow(getContext());
-    await this.lastWindow.setSpecificSystemBarEnabled("status", !fullscreen, false);
-    await this.lastWindow.setSpecificSystemBarEnabled("navigation", !fullscreen, false);
-    await this.lastWindow.setSpecificSystemBarEnabled("navigationIndicator", !fullscreen, false);
+    // 走窗口级系统栏状态机：串行 apply、失败重试、旋转后按最新意图重放，
+    // 避免旋转与全屏切换并发时状态栏显隐被后到的一次吃掉（见 SystemBars）。
+    await windowState.syncSystemBars(fullscreen, this.nextBarsRevision(), this.barsEpoch);
+    // 状态栏显隐会改 TYPE_SYSTEM.topRect，重推一次兜底。
+    windowState.notifySafeArea();
   }
 
   async setWindowOrientation(orientation: number) {
-    this.lastWindow ??= await window.getLastWindow(getContext());
-    await this.lastWindow.setPreferredOrientation(orientation);
+    await windowState.setWindowOrientation(orientation);
   }
 
   async onMethodCall(call: MethodCall, result: MethodResult): Promise<void> {
@@ -511,8 +224,8 @@ export default class HarmonyChannel implements FlutterPlugin {
       case "getDisplayHdrFormats": {
         // 面板实际支持的 HDR 类型。取值见 @ohos.graphics.hdrCapability 的
         // HDRFormat：0=NONE 1=VIDEO_HLG 2=VIDEO_HDR10 3=VIDEO_HDR_VIVID。
-        // 用来决定杜比视界 / HDR10+ 到底能不能按 HDR Vivid 上报，避免在不支持
-        // Vivid 的屏幕上盲目发 Vivid 信令。
+        // Dart 侧据此决定 HDR 片源怎么输出：一个都不支持就按 SDR 输出；不支持
+        // HDR Vivid 就只发 HDR10 静态元数据，不在这块屏上发 Vivid 信令。
         try {
           const d = display.getDefaultDisplaySync();
           const formats: number[] = (d.hdrFormats ?? []) as number[];
@@ -524,6 +237,21 @@ export default class HarmonyChannel implements FlutterPlugin {
           console.error(`HarmonyChannel getDisplayHdrFormats failed: ${err}`);
           result.error("HDR_CAPABILITY_QUERY_FAILED", `${err}`, null);
         }
+        break;
+      }
+      case "getAppCloneIndex": {
+        // 应用分身索引：0 = 主应用，1~5 = 分身应用（见 ApplicationInfo.appIndex）。
+        // 供 Dart 侧判断「当前是否主应用」——分身与主应用共用包名和公共下载目录，
+        // 只有主应用才该把下载落到 storage/Users/currentUser/Download/<bundle>。
+        let appCloneIndex: number = 0;
+        try {
+          const appContext = (getContext() as common.UIAbilityContext)
+            .getApplicationContext();
+          appCloneIndex = appContext.getCurrentAppCloneIndex();
+        } catch (err) {
+          console.error("HarmonyChannel", `getCurrentAppCloneIndex failed: ${err}`);
+        }
+        result.success(appCloneIndex);
         break;
       }
       case "setFullScreenBars": {
@@ -543,12 +271,6 @@ export default class HarmonyChannel implements FlutterPlugin {
         await this.setMiniWindowLandscape(landscape);
         result.success(true);
         break;
-      case "setDecorButtonDark": {
-        const dark: boolean = call.argument("dark") ?? false;
-        await this.setDecorButtonDark(dark);
-        result.success(true);
-        break;
-      }
       case "getWindowState": {
         // 启动时供 Dart 拉取窗口初始状态：是否自由多窗（FLOATING）、是否受限
         // 窗口模式（分屏/自由多窗）。见 Dart 侧 HarmonyChannel.initWindowState。
@@ -571,22 +293,40 @@ export default class HarmonyChannel implements FlutterPlugin {
         result.success(state);
         break;
       }
-      case "getCutoutAvoidArea": {
-        // 启动时供 Dart 拉取挖孔避让区初值，并从此开始监听变化推送
-        // onCutoutAvoidAreaChange。见 Dart 侧 HarmonyChannel.initWindowState。
-        await this.startCutoutListener();
-        const cutout = this.readCutout();
-        this.lastCutout = cutout;
-        result.success(cutout);
+      case "getSafeArea": {
+        // 启动时供 Dart 拉取安全区避让初值，并从此开始监听变化推送
+        // onSafeAreaChange。见 WindowState.readSafeArea 与 Dart 侧
+        // HarmonyChannel.initWindowState。
+        await windowState.startSafeAreaListener();
+        result.success(windowState.readSafeArea());
         break;
       }
-      case "getDecorTopInset": {
-        // 启动时供 Dart 拉取自由窗口顶部避让初值，并从此开始监听变化推送
-        // onDecorTopInsetChange。见 [readDecorTop]。
-        await this.startDecorListener();
-        const top = this.readDecorTop();
-        this.lastDecorTop = top;
-        result.success(top);
+      case "getWindowSnapshot": {
+        // 与 getWindowState 同源，但多了自绘标题带与全屏信息（WindowState）。
+        result.success(windowState.readSnapshot());
+        break;
+      }
+      case "setSystemBarsHidden": {
+        // 幂等下发：hidden + 单调递增 revision + 会话 epoch。旋转后由原生按
+        // 最新意图重放，Dart 侧无需在旋转回调里补发。
+        const hidden: boolean = call.argument("hidden") ?? false;
+        const revision: number = call.argument("revision") ?? 0;
+        const epoch: number = call.argument("epoch") ?? 0;
+        await windowState.syncSystemBars(hidden, revision, epoch);
+        result.success(true);
+        break;
+      }
+      case "enterContentFullScreen": {
+        result.success(await windowChrome.enterContentFullScreen());
+        break;
+      }
+      case "exitContentFullScreen": {
+        result.success(await windowChrome.exitContentFullScreen());
+        break;
+      }
+      case "setWindowDecorVisible": {
+        const visible: boolean = call.argument("visible") ?? true;
+        result.success(this.setWindowDecorVisible(visible));
         break;
       }
       case "getPendingContinuation": {
@@ -714,15 +454,12 @@ export default class HarmonyChannel implements FlutterPlugin {
         result.success(true);
         break;
       }
-      case "setTabSelectedColor": {
-        if (deviceInfo.sdkApiVersion < 23) {
-          result.success(true);
-          break;
-        }
-        const color: string = call.argument('color') ?? '#3367D6';
-        const subColor: string = '#88'+color.substring(1);
-        AppStorage.setOrCreate('tabSelectedColor', color);
-        AppStorage.setOrCreate('tabSelectedSubColor', subColor);
+      case "setAppearance": {
+        // 深浅色模式 + 前景色 + 背景色一并下发，见 appearance/AppAppearance.ets。
+        const colorMode: string = call.argument('colorMode') ?? '';
+        const foreground: string = call.argument('foreground') ?? '';
+        const background: string = call.argument('background') ?? '';
+        appAppearance.setAppearance(colorMode, foreground, background);
         result.success(true);
         break;
       }
@@ -783,12 +520,6 @@ export default class HarmonyChannel implements FlutterPlugin {
         result.success(true);
         break;
       }
-      case "setSystemColorMode": {
-        const colorMode: string = call.argument('colorMode') ?? '';
-        this.setColorMode(colorMode);
-        result.success(true);
-        break;
-      }
       // case 'setWindowLayoutFullScreen': {
       //   this.lastWindow ??= await window.getLastWindow(getContext())
       //   this.lastWindow.setWindowLayoutFullScreen(call.argument('fullScreen'));
@@ -803,17 +534,6 @@ export default class HarmonyChannel implements FlutterPlugin {
       default:
         result.notImplemented();
         break;
-    }
-  }
-
-  // 设置应用上下文的深浅色模式。
-  private setColorMode(colorMode: string): void {
-    try {
-      const context = getContext() as common.ApplicationContext;
-      context.setColorMode(colorModeMap[colorMode]);
-      console.log('HarmonyChannel', `set color mode: ${colorMode}`);
-    } catch (err) {
-      console.error("HarmonyChannel", `get application context failed: ${err}`);
     }
   }
 
@@ -1077,29 +797,32 @@ export default class HarmonyChannel implements FlutterPlugin {
   }
 
   private async setMiniWindowLandscape(landscape: boolean) {
-    this.lastWindow ??= await window.getLastWindow(getContext());
-    if (landscape) {
-      this.lastWindow.enableLandscapeMultiWindow();
-    } else {
-      this.lastWindow.disableLandscapeMultiWindow();
-    }
+    await windowState.setMiniWindowLandscape(landscape);
   }
 
   /**
-   * 自由多窗装饰栏按钮颜色：dark=true 时按深色模式渲染（浅色按钮，适配
-   * 深色内容顶部），false 恢复跟随系统颜色模式。仅装饰栏可见（自由窗口）
-   * 时有视觉效果，其余窗口形态下为无害空操作。
+   * 控制系统装饰栏（应用图标 + 标题那条色条）显隐，直接调官方
+   * window.setWindowDecorVisible。
+   *
+   * 不走 embedding 的 shouldHideWindowDecor 间接路径：那条路会把状态栏一并关
+   * 掉，且把 viewPadding.top 钉成 getTitleButtonRect().height，绕过 TYPE_SYSTEM
+   * 避让计算，使三键带避让无法并入统一安全区。
+   *
+   * API18 以下、或手机全屏下接口抛 1300004 时静默跳过，保持窗口原状。
+   *
+   * @returns 是否成功下发（false 表示当前设备/窗口形态不支持）
    */
-  private async setDecorButtonDark(dark: boolean) {
-    this.lastWindow ??= await window.getLastWindow(getContext());
-    try {
-      this.lastWindow.setDecorButtonStyle({
-        colorMode: dark
-          ? ConfigurationConstant.ColorMode.COLOR_MODE_DARK
-          : ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET,
-      });
-    } catch (err) {
-      console.error("HarmonyChannel", `setDecorButtonStyle failed: ${err}`);
+  public setWindowDecorVisible(visible: boolean): boolean {
+    if (deviceInfo.sdkApiVersion < 18) {
+      return false;
     }
+    // 自由窗口形态下装饰栏（含系统三键）由 WindowChrome 独占：那里会先隐藏
+    // 系统标题栏、再把高度设为自绘标题带高度并把三键隐藏，页面顶部由自绘
+    // 标题带接管。此时 Dart 侧不要从外面把装饰栏重新打开，否则会把自绘
+    // 标题带顶掉。Dart 侧 [WindowBridge] 已按同样条件跳过下发。
+    if (windowChrome.getState().isFreeWindowMode) {
+      return false;
+    }
+    return windowState.setDecorVisible(visible);
   }
 }

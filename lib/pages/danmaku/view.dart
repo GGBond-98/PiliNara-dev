@@ -22,7 +22,6 @@ class PlDanmaku extends StatefulWidget {
   final bool isFullScreen;
   final bool isFileSource;
   final Size size;
-  final double? topInset;
 
   const PlDanmaku({
     super.key,
@@ -32,7 +31,6 @@ class PlDanmaku extends StatefulWidget {
     required this.isFullScreen,
     required this.isFileSource,
     required this.size,
-    this.topInset,
   });
 
   @override
@@ -90,7 +88,10 @@ class _PlDanmakuState extends State<PlDanmaku> {
     if (oldWidget.notFullscreen != widget.notFullscreen &&
         !DanmakuOptions.sameFontScale) {
       _controller?.updateOption(
-        DanmakuOptions.get(notFullscreen: widget.notFullscreen),
+        DanmakuOptions.get(
+          notFullscreen: widget.notFullscreen,
+          speed: playerController.playbackSpeed,
+        ),
       );
     }
     if (oldWidget.isPipMode != widget.isPipMode) {
@@ -142,7 +143,7 @@ class _PlDanmakuState extends State<PlDanmaku> {
       final blockColorful = DanmakuOptions.blockColorful;
       final danmakuWeight = DanmakuOptions.danmakuWeight;
       for (DanmakuElem e in currentDanmakuList) {
-        if (e.weight < danmakuWeight) return;
+        if (e.weight < danmakuWeight) continue;
         if (e.mode == 7) {
           if (kDebugMode &&
               !_loggedEarlySpecialDanmaku &&
@@ -239,13 +240,12 @@ class _PlDanmakuState extends State<PlDanmaku> {
       notFullscreen: widget.notFullscreen,
       speed: playerController.playbackSpeed,
     );
-    // 竖屏全屏时与顶部控件共用同一套顶部避让，并把可视高度同步减去，
-    // 让弹幕轨道按缩小后的区域正确排布
-    final inset = portraitFullscreenTopInset(
+    // 与顶部控件共用同一套顶部避让（鸿蒙窗口化全屏原生安全区），
+    // 并把可视高度同步减去，让弹幕轨道按缩小后的区域正确排布
+    final inset = harmonyDecorTopInset(
+      context,
       isFullScreen: widget.isFullScreen,
-      isPortrait: widget.size.height >= widget.size.width,
       removeSafeArea: playerController.removeSafeArea,
-      topInset: widget.topInset,
     );
     final danmakuSize = inset == null
         ? widget.size

@@ -4,6 +4,7 @@ import 'package:PiliPlus/grpc/bilibili/pagination.pb.dart';
 import 'package:PiliPlus/grpc/grpc_req.dart';
 import 'package:PiliPlus/grpc/url.dart';
 import 'package:PiliPlus/http/loading_state.dart';
+import 'package:PiliPlus/utils/global_data.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:PiliPlus/utils/user_whitelist.dart';
 import 'package:fixnum/fixnum.dart';
@@ -51,7 +52,9 @@ abstract final class ReplyGrpc {
     if (replyBlockedMids.isNotEmpty && replyBlockedMids.containsKey(mid)) {
       return true;
     }
+    // fork 白名单优先于一切屏蔽规则（含下方上游新增的全局黑名单）
     if (UserWhitelist.contains(mid)) return false;
+    if (GlobalData().blackMids.contains(mid)) return true;
     if (antiGoodsReply && needRemoveGoodGrpc(reply)) return true;
     final replyControl = reply.replyControl;
     if (keepUpOwnerReply && upMid != null && reply.mid == upMid) return false;
@@ -65,6 +68,7 @@ abstract final class ReplyGrpc {
   static Future<LoadingState<MainListReply>> mainList({
     int type = 1,
     required int oid,
+    Int64? rpid,
     required Mode mode,
     required String? offset,
     required Int64? cursorNext,
@@ -74,7 +78,7 @@ abstract final class ReplyGrpc {
       MainListReq(
         oid: Int64(oid),
         type: Int64(type),
-        rpid: Int64.ZERO,
+        rpid: rpid,
         cursor: CursorReq(
           mode: mode,
           next: cursorNext,

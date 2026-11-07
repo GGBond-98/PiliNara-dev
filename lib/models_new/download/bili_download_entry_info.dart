@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:PiliPlus/common/widgets/flutter/popup_menu.dart';
 import 'package:PiliPlus/models/common/video/video_type.dart';
+import 'package:PiliPlus/models_new/download/download_info.dart';
+import 'package:PiliPlus/models_new/sponsor_block/segment_item.dart';
 import 'package:PiliPlus/pages/common/multi_select/base.dart'
     show MultiSelectData;
 import 'package:PiliPlus/utils/page_utils.dart';
@@ -14,6 +16,10 @@ import 'package:get/route_manager.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as path;
 import 'package:share_plus/share_plus.dart';
+
+int downloadEntrySort(BiliDownloadEntryInfo a, BiliDownloadEntryInfo b) {
+  return a.sortKey.compareTo(b.sortKey);
+}
 
 class BiliDownloadEntryInfo with MultiSelectData {
   int mediaType;
@@ -40,11 +46,11 @@ class BiliDownloadEntryInfo with MultiSelectData {
   final int? ownerId;
   final String? ownerName;
   PageInfo? pageData;
-  final String? seasonId;
+  final String? seasonId; // pgc
   final SourceInfo? source;
   EpInfo? ep;
-  final String? autoFolderTitle;
-  final String? autoFolderSourceKey;
+  List<SegmentItemModel>? segments;
+  SeasonInfo? seasonInfo;
 
   late String pageDirPath;
   late String entryDirPath;
@@ -66,7 +72,23 @@ class BiliDownloadEntryInfo with MultiSelectData {
     return title;
   }
 
-  Widget moreBtn(ColorScheme colorScheme) => SizedBox(
+  DownloadPageInfo toDownloadPageInfo(String pageId, {int? sortKey}) =>
+      DownloadPageInfo(
+        pageId: pageId,
+        dirPath: pageDirPath,
+        title: title,
+        cover: cover,
+        sortKey: sortKey ?? this.sortKey,
+        seasonType: ep?.seasonType,
+        entries: [this],
+      );
+
+  /// 条目菜单；[extraItemsBuilder] 让分组卡片追加自己的动作（导出整组、加入
+  /// 文件夹），模型本身不认识文件夹与导出流程。
+  Widget moreBtn(
+    ColorScheme colorScheme, {
+    List<PopupMenuEntry<void>> Function(BuildContext context)? extraItemsBuilder,
+  }) => SizedBox(
     width: 29,
     height: 29,
     child: Builder(
@@ -146,6 +168,8 @@ class BiliDownloadEntryInfo with MultiSelectData {
                   style: TextStyle(fontSize: 13),
                 ),
               ),
+              // 分组卡片追加自己的动作（导出整组、加入文件夹等）
+              ...?extraItemsBuilder?.call(context),
             ],
           );
         },
@@ -209,8 +233,8 @@ class BiliDownloadEntryInfo with MultiSelectData {
     this.seasonId,
     this.source,
     this.ep,
-    this.autoFolderTitle,
-    this.autoFolderSourceKey,
+    this.segments,
+    this.seasonInfo,
   });
 
   factory BiliDownloadEntryInfo.fromJson(Map<String, dynamic> json) =>
@@ -249,8 +273,10 @@ class BiliDownloadEntryInfo with MultiSelectData {
         ep: json['ep'] != null
             ? EpInfo.fromJson(json['ep'] as Map<String, dynamic>)
             : null,
-        autoFolderTitle: json['auto_folder_title'] as String?,
-        autoFolderSourceKey: json['auto_folder_source_key'] as String?,
+        segments: SegmentItemModel.fromCache(json['segments']),
+        seasonInfo: json['season_info'] != null
+            ? SeasonInfo.fromJson(json['season_info'] as Map<String, dynamic>)
+            : null,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -281,8 +307,8 @@ class BiliDownloadEntryInfo with MultiSelectData {
     'season_id': ?seasonId,
     'source': ?source?.toJson(),
     'ep': ?ep?.toJson(),
-    'auto_folder_title': ?autoFolderTitle,
-    'auto_folder_source_key': ?autoFolderSourceKey,
+    'segments': ?segments?.map((e) => e.toJson()).toList(),
+    'season_info': ?seasonInfo?.toJson(),
   };
 
   @override
@@ -298,6 +324,56 @@ class BiliDownloadEntryInfo with MultiSelectData {
 
   @override
   int get hashCode => cid.hashCode;
+}
+
+class SeasonInfo {
+  final int index;
+  final int id;
+  final String title;
+  final String cover;
+  final int mid;
+  final String uname;
+
+  SeasonInfo({
+    required this.index,
+    required this.id,
+    required this.title,
+    required this.cover,
+    required this.mid,
+    required this.uname,
+  });
+
+  factory SeasonInfo.fromJson(Map<String, dynamic> json) => SeasonInfo(
+    index: json['index'] as int,
+    id: json['id'] as int,
+    title: json['title'] as String,
+    cover: json['cover'] as String,
+    mid: json['mid'] as int,
+    uname: json['uname'] as String,
+  );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'index': index,
+    'id': id,
+    'title': title,
+    'cover': cover,
+    'mid': mid,
+    'uname': uname,
+  };
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) {
+      return true;
+    }
+    if (other is SeasonInfo) {
+      return id == other.id;
+    }
+    return false;
+  }
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
 class PageInfo {

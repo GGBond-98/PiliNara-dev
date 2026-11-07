@@ -7,6 +7,9 @@ import 'package:PiliPlus/common/widgets/custom_toast.dart';
 import 'package:PiliPlus/common/widgets/route_aware_mixin.dart';
 import 'package:PiliPlus/common/widgets/scale_app.dart';
 import 'package:PiliPlus/common/widgets/scroll_behavior.dart';
+import 'package:PiliPlus/harmony_adapt/window/system_bars.dart';
+import 'package:PiliPlus/harmony_adapt/appearance/appearance_sync.dart';
+import 'package:PiliPlus/harmony_adapt/window/window_bridge.dart';
 import 'package:PiliPlus/harmony_adapt/harmony_channel.dart';
 import 'package:PiliPlus/harmony_adapt/shell_bars_observer.dart';
 import 'package:PiliPlus/http/init.dart';
@@ -14,7 +17,8 @@ import 'package:PiliPlus/models/common/theme/theme_color_type.dart';
 import 'package:PiliPlus/plugin/pl_player/utils/fullscreen.dart';
 import 'package:PiliPlus/router/app_pages.dart';
 import 'package:PiliPlus/services/account_service.dart';
-import 'package:PiliPlus/services/download/download_collection_service.dart';
+import 'package:PiliPlus/services/download/download_folder_service.dart';
+import 'package:PiliPlus/services/download/download_library_service.dart';
 import 'package:PiliPlus/services/download/download_service.dart';
 import 'package:PiliPlus/services/logger.dart';
 import 'package:PiliPlus/services/route_stack_observer.dart';
@@ -27,6 +31,7 @@ import 'package:PiliPlus/utils/extension/core_palettes_ext.dart';
 import 'package:PiliPlus/utils/extension/theme_ext.dart';
 import 'package:PiliPlus/utils/font_utils.dart';
 import 'package:PiliPlus/utils/image_memory_cleaner.dart';
+import 'package:PiliPlus/utils/ios/pip_helper.dart';
 import 'package:PiliPlus/utils/json_file_handler.dart';
 import 'package:PiliPlus/utils/max_screen_size.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
@@ -83,7 +88,12 @@ Future<void> _initDownPath() async {
       downloadPath = defDownloadPath;
     }
   } else if (OS.isHarmony) {
-    downloadPath = 'storage/Users/currentUser/Download/com.pilinara.dev';
+    // 主应用与分身应用共用包名，但分身应用不允许访问下载目录：只有主应用能
+    // 落到系统的 Download/<bundle>，分身仍走应用私有目录。
+    await HarmonyChannel.loadAppCloneIndex();
+    downloadPath = HarmonyChannel.isAppClone
+        ? defDownloadPath
+        : 'storage/Users/currentUser/Download/com.pilinara.dev';
   } else if (Platform.isAndroid) {
     final externalStorageDirPath = (await getExternalStorageDirectory())?.path;
     downloadPath = externalStorageDirPath != null
@@ -126,7 +136,8 @@ void main() async {
   Get
     ..lazyPut(AccountService.new)
     ..lazyPut(DownloadService.new)
-    ..put(DownloadCollectionService());
+    ..put(DownloadFolderService())
+    ..put(DownloadLibraryService());
 
   // 设置自动同步（修改后/定时）：监听 setting/video 盒变更
   SettingsSyncService.instance.init();
@@ -139,6 +150,7 @@ void main() async {
     await Future.wait([
       if (Pref.horizontalScreen) ?fullMode() else ?portraitUpMode(),
       setupServiceLocator(),
+      if (Platform.isIOS) IOSPipHelper.init(),
     ]);
   } else if (OS.isHarmony) {
     // 鸿蒙 2in1 设备 isPCOS 为 true（isMobile 为 false），但同样需要媒体服务，
@@ -179,13 +191,19 @@ void main() async {
   // ESC 全平台注册：平板/手机外接键盘也可用（PageRoute 默认不消费 escape）
   FocusManager.instance.addEarlyKeyEventHandler(_onKeyEvent);
 
+  if (OS.isHarmony) {
+    // 鸿蒙窗口域初始化（唯一入口）：按窗口状态选系统栏模式（自由多窗下隐藏
+    // 系统装饰栏进入沉浸，否则 edgeToEdge），再拉窗口快照与安全区，据此定下
+    // 小窗缩放与装饰栏策略。必须在首帧前一次到位——先 edgeToEdge 再改会让装
+    // 饰栏先出现再收回。内部顺序见 WindowBridge.init。
+    //
+    // 放在 isMobile 判断之外：2in1 设备 isPCOS 为 true、isMobile 为 false，
+    // 但窗口形态（自由多窗/分屏）同样存在，不能跳过。
+    await WindowBridge.init();
+  }
+
   if (PlatformUtils.isMobile) {
-    if (OS.isHarmony) {
-      // 鸿蒙按窗口状态选系统栏模式：自由多窗下隐藏系统装饰栏（沉浸），否则
-      // edgeToEdge。必须在首帧前一次到位——先 edgeToEdge 再改会让装饰栏先
-      // 出现再收回。见 HarmonyChannel.initWindowState / _syncWindowDecor。
-      await HarmonyChannel.initWindowState();
-    } else {
+    if (!OS.isHarmony) {
       SystemChrome.setEnabledSystemUIMode(.edgeToEdge);
     }
     SystemChrome.setSystemUIOverlayStyle(
@@ -265,13 +283,18 @@ void main() async {
     // 顺带注册 method channel handler，保证热启动接续推送可达
     WidgetsBinding.instance.addPostFrameCallback((_) {
       HarmonyChannel.checkPendingContinuation();
-      // 查询面板支持的 HDR 类型，决定杜比视界 / HDR10+ 能否按 HDR Vivid 上报
+      // 查询面板支持的 HDR 类型：一个都不支持时 HDR 片源按 SDR 输出，
+      // 不支持 HDR Vivid 时只发 HDR10 静态元数据
       HarmonyChannel.loadDisplayHdrFormats();
-      // 将当前主题颜色模式同步给原生层（Rx 初始值相同不触发监听，需显式同步）
-      ThemeUtils.syncColorModeToNative();
+      // 统一把深浅色模式与前景/背景色下发给原生，并跟随主题变化重发
+      AppearanceSync.attach();
+      // 首帧后对账一次系统栏期望：engine 重建 / 热重启后原生侧可能还停在上一
+      // 个会话的「已隐藏」，Dart 侧状态已归零，需主动下发一次让两边收敛
+      SystemBars.resync(hidden: !showSystemBar_);
     });
   }
 }
+
 KeyEventResult _onKeyEvent(KeyEvent event) {
   if (event.logicalKey == LogicalKeyboardKey.escape && event is KeyDownEvent) {
     MyApp._onBack();
@@ -384,13 +407,12 @@ class MyApp extends StatelessWidget {
     // 均来自引擎），本方法不会因此重建，下面的缩放校正会失效、页面布局与
     // 渲染画布脱节（如平板全景多窗内点全屏后内容只占 75%、右/下露白底）。
     // 必须显式监听缩放变化触发重建。
-    // 鸿蒙挖孔避让区由原生异步上报/随旋转变化，同样不会触发根 MediaQuery
-    // 重建，一并监听。
+    // 鸿蒙安全区避让区（含挖孔）由原生异步上报/随旋转变化，同样不会触发根
+    // MediaQuery 重建，一并监听。
     return ListenableBuilder(
       listenable: Listenable.merge([
         ScaledWidgetsFlutterBinding.instance.scaleFactorNotifier,
-        if (OS.isHarmony) HarmonyChannel.cutoutInsets,
-        if (OS.isHarmony) HarmonyChannel.decorTopInset,
+        if (OS.isHarmony) HarmonyChannel.safeAreaInsets,
       ]),
       builder: (context, _) => _scaledBuilder(context, child),
     );
@@ -442,14 +464,13 @@ class MyApp extends StatelessWidget {
     // 覆盖参数被静默丢掉，手机上（uiScale 恒为 1.0）该修复完全失效。
     if (OS.isHarmony) {
       // 鸿蒙 embedding 上报的 padding 不含摄像头挖孔（只读 TYPE_SYSTEM 避让区），
-      // 横屏时 left/right 恒为 0、竖屏隐藏状态栏后 top 归 0。此处把原生上报的
-      // TYPE_CUTOUT 避让区按边取 max 合并进来，对齐 Android 语义，下游
-      // ViewSafeArea/SafeArea 无需再区分平台。见 HarmonyChannel.cutoutInsets。
+      // 此处把原生上报的 max(TYPE_SYSTEM, TYPE_CUTOUT) 避让区按边取 max 合并
+      // 进来，对齐 Android 语义。见 HarmonyChannel.safeAreaInsets。
       final dpr = mediaQuery.devicePixelRatio;
       mediaQuery = mediaQuery.copyWith(
         gestureSettings: const DeviceGestureSettings(touchSlop: 8),
-        padding: HarmonyChannel.mergeCutout(mediaQuery.padding, dpr),
-        viewPadding: HarmonyChannel.mergeCutout(mediaQuery.viewPadding, dpr),
+        padding: HarmonyChannel.mergeSafeArea(mediaQuery.padding, dpr),
+        viewPadding: HarmonyChannel.mergeSafeArea(mediaQuery.viewPadding, dpr),
       );
     }
     if (uiScale != 1.0) {

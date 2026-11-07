@@ -4,7 +4,6 @@ import 'package:PiliPlus/common/sliver_single_child_delegate.dart';
 import 'package:PiliPlus/common/style.dart';
 import 'package:PiliPlus/common/widgets/flutter/refresh_indicator.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
-import 'package:PiliPlus/common/widgets/scaffold/mini_scaffold.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/sliver/sliver_floating_header.dart';
 import 'package:PiliPlus/grpc/bilibili/main/community/reply/v1.pb.dart'
@@ -14,12 +13,10 @@ import 'package:PiliPlus/pages/common/fab_mixin.dart';
 import 'package:PiliPlus/pages/video/reply/controller.dart';
 import 'package:PiliPlus/pages/video/reply/vote/reply_vote_item.dart';
 import 'package:PiliPlus/pages/video/reply/widgets/reply_item_grpc.dart';
-import 'package:PiliPlus/pages/video/reply_reply/view.dart';
 import 'package:PiliPlus/plugin/pl_player/models/fullscreen_mode.dart';
 import 'package:PiliPlus/utils/feed_back.dart';
-import 'package:easy_debounce/easy_throttle.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:get/get.dart';
+import 'package:material_ui/material_ui.dart';
 
 class VideoReplyPanel extends StatefulWidget {
   const VideoReplyPanel({
@@ -63,6 +60,7 @@ class _VideoReplyPanelState extends State<VideoReplyPanel>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _videoReplyController.didChangeDependencies(context);
     colorScheme = ColorScheme.of(context);
     bottom = MediaQuery.viewPaddingOf(context).bottom;
   }
@@ -91,6 +89,7 @@ class _VideoReplyPanelState extends State<VideoReplyPanel>
             null,
             oid: _videoReplyController.aid,
             replyType: _videoReplyController.videoType.replyType,
+            mentionItem: _videoReplyController.mentionItem,
           );
         }
 
@@ -216,10 +215,11 @@ class _VideoReplyPanelState extends State<VideoReplyPanel>
                   ),
                 );
               } else {
-                return ReplyItemGrpc(
-                  replyItem: response[index],
+                final item = response[index];
+                final child = ReplyItemGrpc(
+                  replyItem: item,
                   replyLevel: widget.replyLevel,
-                  replyReply: replyReply,
+                  replyReply: _videoReplyController.replyReply,
                   onReply: _videoReplyController.onReply,
                   onDelete: (item, subIndex) =>
                       _videoReplyController.onRemove(index, item, subIndex),
@@ -233,6 +233,13 @@ class _VideoReplyPanelState extends State<VideoReplyPanel>
                     _videoReplyController.videoType.replyType,
                   ),
                 );
+                if (item.id == _videoReplyController.targetRootRpId) {
+                  return _videoReplyController.colorAnimWrapper(
+                    colorScheme,
+                    child,
+                  );
+                }
+                return child;
               }
             },
             itemCount: count,
@@ -260,27 +267,5 @@ class _VideoReplyPanelState extends State<VideoReplyPanel>
           onReload: _videoReplyController.onReload,
         );
     }
-  }
-
-  // 展示二级回复
-  void replyReply(ReplyInfo replyItem, int? id) {
-    EasyThrottle.throttle('replyReply', const Duration(milliseconds: 500), () {
-      int oid = replyItem.oid.toInt();
-      int rpid = replyItem.id.toInt();
-      MiniScaffold.of(context).showBottomSheet(
-        constraints: const BoxConstraints(),
-        (context) => VideoReplyReplyPanel(
-          id: id,
-          oid: oid,
-          rpid: rpid,
-          firstFloor: replyItem.replyControl.isNote ? null : replyItem,
-          replyType: _videoReplyController.videoType.replyType,
-          isVideoDetail: true,
-          isNested: widget.isNested,
-          heroTag: heroTag,
-          upMid: _videoReplyController.upMid,
-        ),
-      );
-    });
   }
 }

@@ -27,7 +27,9 @@ import 'package:PiliPlus/utils/extension/file_ext.dart';
 import 'package:PiliPlus/utils/extension/string_ext.dart';
 import 'package:PiliPlus/utils/id_utils.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
-import 'package:flutter/foundation.dart';
+import 'package:PiliPlus/utils/storage_pref.dart';
+import 'package:flutter/foundation.dart'
+    show kDebugMode, debugPrint, VoidCallback, ValueChanged;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:os_type/os_type.dart';
@@ -41,6 +43,9 @@ class DownloadService extends GetxService {
   static const _indexFile = 'index.json';
   static const _maxDanmakuConcurrency = 4;
 
+  /// 早期版本把 UGC 合集归属写进 `auto_folder_source_key` 时用的前缀。
+  static const _ugcSeasonKeyPrefix = 'ugc-season:';
+
   final _lock = Lock();
 
   /// 弹幕下载锁：批量更新时外层 Future.wait 会并发调用多次 downloadDanmaku，
@@ -48,7 +53,6 @@ class DownloadService extends GetxService {
   final _danmakuLock = Lock();
 
   final flagNotifier = SetNotifier();
-  final completedEntryNotifier = Set<ValueChanged<BiliDownloadEntryInfo>>();
   final waitDownloadQueue = RxList<BiliDownloadEntryInfo>();
   final downloadList = <BiliDownloadEntryInfo>[];
 
@@ -105,7 +109,11 @@ class DownloadService extends GetxService {
         if (entryFile.existsSync()) {
           try {
             final entryJson = await entryFile.readAsString();
-            final entry = BiliDownloadEntryInfo.fromJson(jsonDecode(entryJson))
+            final json = jsonDecode(entryJson) as Map<String, dynamic>;
+            if (_migrateAutoFolder(json)) {
+              await entryFile.writeAsString(jsonEncode(json));
+            }
+            final entry = BiliDownloadEntryInfo.fromJson(json)
               ..pageDirPath = pageDir.path
               ..entryDirPath = entryDir.path;
             if (entry.isCompleted) {
@@ -121,13 +129,52 @@ class DownloadService extends GetxService {
     return result;
   }
 
-  void downloadVideo(
-    Part page,
+  /// 一次性迁移：早期版本把 UGC 合集归属写成 `auto_folder_*`，这里换算成条目
+  /// 自带的 `season_info`，换算后按 season_info 分组，并删掉旧字段。已有
+  /// `season_info` 的条目直接跳过，因此重复执行无副作用。
+  ///
+  /// 换算不出封面与 UP 主时用条目自身的值兜底；PGC 与分P 的归属由 `pageId` /
+  /// `sortKey` 两个 getter 提供，不经过这里。
+  static bool _migrateAutoFolder(Map<String, dynamic> json) {
+    if (json['season_info'] != null) {
+      return false;
+    }
+    final sourceKey = json['auto_folder_source_key'];
+    final title = json['auto_folder_title'];
+    if (sourceKey is! String ||
+        !sourceKey.startsWith(_ugcSeasonKeyPrefix) ||
+        title is! String ||
+        title.isEmpty) {
+      return false;
+    }
+    final seasonId = int.tryParse(
+      sourceKey.substring(_ugcSeasonKeyPrefix.length),
+    );
+    if (seasonId == null) {
+      return false;
+    }
+    json['season_info'] = SeasonInfo(
+      index: json['auto_folder_index'] as int? ?? 0,
+      id: seasonId,
+      title: title,
+      cover: json['cover'] as String? ?? '',
+      mid: json['owner_id'] as int? ?? 0,
+      uname: json['owner_name'] as String? ?? '',
+    ).toJson();
+    json
+      ..remove('auto_folder_title')
+      ..remove('auto_folder_source_key')
+      ..remove('auto_folder_index');
+    return true;
+  }
+
+  void downloadVideo({
+    required int index,
+    required Part page,
     VideoDetailData? videoDetail,
     ugc.EpisodeItem? videoArc,
-    VideoQuality videoQuality, {
-    String? autoFolderTitle,
-    String? autoFolderSourceKey,
+    required VideoQuality videoQuality,
+    SeasonInfo? seasonInfo,
   }) {
     final cid = page.cid!;
     if (downloadList.indexWhere((e) => e.cid == cid) != -1) {
@@ -179,18 +226,17 @@ class DownloadService extends GetxService {
       ownerId: videoDetail?.owner?.mid ?? videoArc?.arc?.author?.mid,
       ownerName: videoDetail?.owner?.name ?? videoArc?.arc?.author?.name,
       pageData: pageData,
-      autoFolderTitle: autoFolderTitle,
-      autoFolderSourceKey: autoFolderSourceKey,
+      seasonInfo: seasonInfo,
     );
     _createDownload(entry);
   }
 
-  void downloadBangumi(
-    int index,
-    PgcInfoModel pgcItem,
-    pgc.EpisodeItem episode,
-    VideoQuality quality,
-  ) {
+  void downloadBangumi({
+    required int index,
+    required PgcInfoModel pgcItem,
+    required pgc.EpisodeItem episode,
+    required VideoQuality quality,
+  }) {
     final cid = episode.cid!;
     if (downloadList.indexWhere((e) => e.cid == cid) != -1) {
       return;
@@ -577,13 +623,77 @@ class DownloadService extends GetxService {
     }
   }
 
+  /// 更新离线缓存里的空降/跳过片段（供「更新片段」菜单使用）
+  ///
+  /// 上游把片段存在 entry.segments（entry.json），本 fork 另有一套
+  /// playback_meta.json，两者各自保留：这里只负责刷新 entry.segments。
+  Future<bool> updateSegments(BiliDownloadEntryInfo entry) {
+    if (entry.pageData != null) {
+      return _updateBlockSegments(entry);
+    } else {
+      return _updatePgcSegments(entry);
+    }
+  }
+
+  Future<bool> _updateBlockSegments(BiliDownloadEntryInfo entry) async {
+    final res = await SponsorBlock.getSkipSegments(
+      bvid: entry.bvid,
+      cid: entry.pageData!.cid,
+    );
+    if (res case Success(:final response)) {
+      if (response.isNotEmpty) {
+        entry.segments = response;
+        await _updateBiliDownloadEntryJson(entry);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  Future<bool> _updatePgcSegments(BiliDownloadEntryInfo entry) async {
+    final ep = entry.ep;
+    if (ep == null) return false;
+    final res = await VideoHttp.videoUrl(
+      avid: entry.avid,
+      bvid: entry.bvid,
+      cid: entry.cid,
+      seasonId: entry.seasonId,
+      epid: ep.episodeId,
+      qn: entry.preferedVideoQuality,
+      tryLook: false,
+      videoType: switch (ep.from) {
+        'pugv' => .pugv,
+        _ => .pgc,
+      },
+    );
+    if (res case Success(:final response)) {
+      final clipInfoList = response.clipInfoList;
+      if (clipInfoList != null && clipInfoList.isNotEmpty) {
+        entry.segments = clipInfoList;
+        await _updateBiliDownloadEntryJson(entry);
+      }
+      return true;
+    }
+    return false;
+  }
+
   Future<void> _startDownload(BiliDownloadEntryInfo entry) async {
     try {
       if (!await downloadDanmaku(entry: entry)) {
         return;
       }
 
+      // ugc segments
+      if (entry.pageData != null && Pref.enableSponsorBlock) {
+        await _updateBlockSegments(entry);
+      }
+
       _updateCurStatus(DownloadStatus.getPlayUrl);
+
+      // 上游的 DownloadHttp.getVideoUrl 会把 pgc 的 clipInfoList 写进 entry.segments，
+      // 本 fork 改为经 DownloadVideoUrlResult 同时取回（供 playback_meta 使用），
+      // 因此首次拿到片段时需要自己落盘一次 entry.json
+      final noSegmentBefore = entry.segments == null;
 
       final downloadResult = await DownloadHttp.getVideoUrl(
         entry: entry,
@@ -592,6 +702,11 @@ class DownloadService extends GetxService {
         pageData: entry.pageData,
       );
       final mediaFileInfo = downloadResult.mediaFileInfo;
+
+      // pgc segments
+      if (noSegmentBefore && entry.segments != null) {
+        await _updateBiliDownloadEntryJson(entry);
+      }
 
       final videoDir = Directory(path.join(entry.entryDirPath, entry.typeTag));
       if (!videoDir.existsSync()) {
@@ -739,7 +854,6 @@ class DownloadService extends GetxService {
     await _updateBiliDownloadEntryJson(entry);
     waitDownloadQueue.remove(entry);
     downloadList.insert(0, entry);
-    completedEntryNotifier.notify(entry);
     flagNotifier.refresh();
     _curCid = null;
     curDownload.value = null;
@@ -933,10 +1047,3 @@ extension SetNotifierExt on SetNotifier {
   }
 }
 
-extension EntryNotifierExt on Set<ValueChanged<BiliDownloadEntryInfo>> {
-  void notify(BiliDownloadEntryInfo entry) {
-    for (final i in this) {
-      i(entry);
-    }
-  }
-}

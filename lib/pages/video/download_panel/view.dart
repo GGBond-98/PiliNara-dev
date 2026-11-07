@@ -8,12 +8,13 @@ import 'package:PiliPlus/common/widgets/stat/stat.dart';
 import 'package:PiliPlus/models/common/badge_type.dart';
 import 'package:PiliPlus/models/common/stat_type.dart';
 import 'package:PiliPlus/models/common/video/video_quality.dart';
+import 'package:PiliPlus/models_new/download/bili_download_entry_info.dart';
 import 'package:PiliPlus/models_new/pgc/pgc_info_model/episode.dart' as pgc;
 import 'package:PiliPlus/models_new/pgc/pgc_info_model/result.dart';
 import 'package:PiliPlus/models_new/video/video_detail/data.dart';
 import 'package:PiliPlus/models_new/video/video_detail/episode.dart' as ugc;
 import 'package:PiliPlus/models_new/video/video_detail/page.dart';
-import 'package:PiliPlus/pages/download/view.dart';
+import 'package:PiliPlus/pages/download/download/view.dart';
 import 'package:PiliPlus/pages/video/controller.dart';
 import 'package:PiliPlus/pages/video/introduction/ugc/controller.dart';
 import 'package:PiliPlus/pages/video/introduction/ugc/widgets/page.dart';
@@ -69,17 +70,19 @@ class _DownloadPanelState extends State<DownloadPanel> {
   late final cidSet = widget.cidSet;
   VideoQuality _quality = VideoQuality.fromCode(Pref.defaultVideoQa);
 
-  ({String title, String sourceKey})? get _autoFolderInfo {
-    final ugcSeason = widget.videoDetail?.ugcSeason;
-    final title = ugcSeason?.title?.trim();
-    final seasonId = ugcSeason?.id;
-    if (title == null || title.isEmpty || seasonId == null) {
+  /// 该条目所属的 UGC 合集，序号取它在 `episodes`（ugcSeason 各 section
+  /// 拉平）中的位置，也就是合集里的原顺序。
+  ///
+  /// 只有合集成员才算：成员是 [ugc.EpisodeItem]；「有 ugcSeason 但 sections
+  /// 为空、episodes 退化成单视频分P列表」时拿到的是 [Part]，此时不属于任何
+  /// 合集，这些分P 仍按 avid 归成同一页。
+  SeasonInfo? _seasonInfo(ugc.BaseEpisodeItem episode, ugc.EpisodeItem? parent) {
+    final item = parent ?? episode;
+    if (item is! ugc.EpisodeItem) {
       return null;
     }
-    return (
-      title: title,
-      sourceKey: 'ugc-season:$seasonId',
-    );
+    final index = widget.episodes.indexOf(item);
+    return index < 0 ? null : widget.videoDetail?.seasonInfo(index);
   }
 
   @override
@@ -163,7 +166,7 @@ class _DownloadPanelState extends State<DownloadPanel> {
               ),
             ),
           ),
-          if (kDebugMode || PlatformUtils.isMobile) ...[
+          if (PlatformUtils.isMobile) ...[
             const Spacer(),
             StreamBuilder(
               stream: Connectivity().onConnectivityChanged,
@@ -299,34 +302,34 @@ class _DownloadPanelState extends State<DownloadPanel> {
     }
 
     try {
-      final autoFolderInfo = _autoFolderInfo;
+      final seasonInfo = _seasonInfo(episode, parent);
       switch (episode) {
         case Part part:
           _downloadService.downloadVideo(
-            part,
-            parent == null ? widget.videoDetail : null,
-            parent,
-            _quality,
-            autoFolderTitle: autoFolderInfo?.title,
-            autoFolderSourceKey: autoFolderInfo?.sourceKey,
+            index: index,
+            page: part,
+            videoDetail: parent == null ? widget.videoDetail : null,
+            videoArc: parent,
+            videoQuality: _quality,
+            seasonInfo: seasonInfo,
           );
           break;
         case ugc.EpisodeItem episode:
           _downloadService.downloadVideo(
-            episode.pages!.first,
-            null,
-            episode,
-            _quality,
-            autoFolderTitle: autoFolderInfo?.title,
-            autoFolderSourceKey: autoFolderInfo?.sourceKey,
+            index: index,
+            page: episode.pages!.first,
+            videoDetail: null,
+            videoArc: episode,
+            videoQuality: _quality,
+            seasonInfo: seasonInfo,
           );
           break;
         case pgc.EpisodeItem episode:
           _downloadService.downloadBangumi(
-            index,
-            widget.pgcItem!,
-            episode,
-            _quality,
+            index: index,
+            pgcItem: widget.pgcItem!,
+            episode: episode,
+            quality: _quality,
           );
           break;
       }

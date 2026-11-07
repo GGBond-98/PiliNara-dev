@@ -1,6 +1,7 @@
 import 'dart:math' show max;
 
 import 'package:PiliPlus/common/widgets/scale_app.dart';
+import 'package:PiliPlus/harmony_adapt/window/window_facts.dart';
 import 'package:PiliPlus/harmony_adapt/continuation.dart';
 import 'package:PiliPlus/models/common/harmony/hds_material_level.dart';
 import 'package:PiliPlus/models/common/nav_bar_config.dart';
@@ -14,10 +15,8 @@ import 'package:get/get.dart';
 import 'package:os_type/os_type.dart';
 
 abstract class HarmonyChannel {
-  /// @ohos.graphics.hdrCapability 的 HDRFormat 取值。
-  static const int hdrFormatHlg = 1;
-  static const int hdrFormatHdr10 = 2;
-  static const int hdrFormatVivid = 3;
+  /// @ohos.graphics.hdrCapability 的 HDRFormat 中 HDR Vivid 的取值。
+  static const int _hdrFormatVivid = 3;
 
   /// 面板实际支持的 HDR 类型，启动时查一次。
   ///
@@ -26,30 +25,21 @@ abstract class HarmonyChannel {
   /// 完全正常的设备上被静默禁用；后者才是这块屏确实不支持。
   static Set<int>? _displayHdrFormats;
 
-  static Set<int> get displayHdrFormats => _displayHdrFormats ?? const {};
-
   /// 面板是否**明确**不支持任何 HDR 格式。只有问出过结果才敢下这个结论，
   /// 见 [_displayHdrFormats] 对 null 的说明。
   static bool get displayHasNoHdr => _displayHdrFormats?.isEmpty ?? false;
 
-  /// 面板**确证**支持 HDR Vivid（保守口径，未知按不支持）。
+  /// 面板**没有明确表示**不支持 HDR Vivid（未知按支持）。
   ///
-  /// 用于杜比视界：它只是借 Vivid 的标签让面板拉峰值亮度，自己没有 CUVA
-  /// 载荷，没确证就退回 hdr10 更稳。
-  static bool get displaySupportsHdrVivid =>
-      _displayHdrFormats?.contains(hdrFormatVivid) ?? false;
-
-  /// 面板**没有明确表示**不支持 HDR Vivid（乐观口径，未知按支持）。
-  ///
-  /// 用于原生 HDR Vivid 片源：片源自己带 CUVA，本来就该按 Vivid 上报。
-  /// 与 [displayHasNoHdr] 同一个口径——查询失败不该把它静默降级成 hdr10。
+  /// HDR Vivid 是鸿蒙唯一带动态元数据的类型，HDR Vivid、杜比视界、HDR10+
+  /// 都靠它上报。与 [displayHasNoHdr] 同一个口径——查询失败不该把它们静默
+  /// 降级成只有静态元数据的 HDR10。
   static bool get displayMaySupportHdrVivid =>
-      _displayHdrFormats?.contains(hdrFormatVivid) ?? true;
+      _displayHdrFormats?.contains(_hdrFormatVivid) ?? true;
 
   /// 查询面板的 HDR 能力。只在鸿蒙上有意义。
   ///
-  /// 失败时**保持 null**（未知）而不是记成空集：原生侧查询异常与「这块屏真的
-  /// 不支持 HDR」必须区分开，否则一次偶发失败会把 HDR 永久关掉。
+  /// 失败时能力保持未知，不能记成空集，见 [_displayHdrFormats]。
   static Future<void> loadDisplayHdrFormats() async {
     if (!OS.isHarmony) return;
     try {
@@ -60,12 +50,6 @@ abstract class HarmonyChannel {
         for (final e in list ?? const <Object?>[])
           if (e is int) e,
       };
-      if (kDebugMode) {
-        debugPrint(
-          '[HDRCAP] display hdrFormats=$_displayHdrFormats '
-          'vivid=$displaySupportsHdrVivid',
-        );
-      }
     } catch (e) {
       // 含 MissingPluginException：原生侧没有这个 method 的旧版本。
       // 不写 _displayHdrFormats，能力保持「未知」。
@@ -131,6 +115,31 @@ abstract class HarmonyChannel {
     );
   }
 
+  /// 应用分身索引：0 = 主应用，1~5 = 分身应用
+  static int _appCloneIndex = 0;
+
+  /// 当前是否运行在分身应用里。主应用为 false
+  static bool get isAppClone => _appCloneIndex > 0;
+
+  /// 当前是否运行在主应用里
+  static bool get isMainApp => _appCloneIndex == 0;
+
+  /// 查询当前是否为主应用。
+  static Future<void> loadAppCloneIndex() async {
+    if (!OS.isHarmony) return;
+    try {
+      final index = await _channel.invokeMethod<int>('getAppCloneIndex');
+      _appCloneIndex = index ?? 0;
+    } catch (e) {
+      // 含 MissingPluginException：原生侧没有这个 method 的旧版本。
+      // 不写非 0 值，按主应用处理，避免把下载目录误降到应用私有目录。
+      _appCloneIndex = 0;
+      if (kDebugMode) {
+        debugPrint('[APPCLONE] query failed, treat as main app: $e');
+      }
+    }
+  }
+
   static final MethodChannel _channel = const MethodChannel('harmonyChannel')
     ..setMethodCallHandler(handler);
 
@@ -145,13 +154,20 @@ abstract class HarmonyChannel {
         );
         break;
       case 'onWindowModeChange':
-        _windowMode = call.arguments['isWindowMode'] as bool? ?? false;
+        _windowMode = WindowFacts.isWindowMode =
+            call.arguments['isWindowMode'] as bool? ?? false;
         break;
-      case 'onCutoutAvoidAreaChange':
-        _updateCutout(call.arguments);
+      case 'onSafeAreaChange':
+        _updateSafeArea(call.arguments);
         break;
-      case 'onDecorTopInsetChange':
-        _updateDecorTop(call.arguments['top']);
+      // 原生窗口快照（自由多窗/小窗/分屏/标题带状态的整体推送，
+      // 见 ArkTS WindowState.emitSnapshot）
+      case 'onWindowSnapshot':
+        if (call.arguments is Map) {
+          applyWindowSnapshot(
+            (call.arguments as Map).cast<Object?, Object?>(),
+          );
+        }
         break;
       // 源端 onContinue 拉取当前播放状态
       case 'getContinuationState':
@@ -260,15 +276,19 @@ abstract class HarmonyChannel {
 
   /// 控制原生 HDS 底栏/顶栏的显隐（弹窗、全屏页等场景）
   static Future<void> setShellBarsHidden(
-    bool hidden, 
-    {bool retry = false, bool force = false,}
-  ) async {
+    bool hidden, {
+    bool retry = false,
+    bool force = false,
+  }) async {
     if (!OS.isHarmony) return;
     _hiddenByPage = hidden;
     final int total = retry ? 8 : 1;
     for (int i = 0; i < total; i++) {
       try {
-        _channel.invokeMethod('setShellBarsHidden', {'hidden': hidden,'force': force});
+        _channel.invokeMethod('setShellBarsHidden', {
+          'hidden': hidden,
+          'force': force,
+        });
         return;
       } catch (_) {
         if (i == total - 1) return;
@@ -281,9 +301,18 @@ abstract class HarmonyChannel {
   static Future<void> setTabMaterialLevel(HdsMaterialLevel level) =>
       _invoke('setTabMaterialLevel', {'level': level.value});
 
-  /// 同步主题色到 ArkTS HdsTabs 底栏
-  static Future<void> setTabSelectedColor(String hexColor) =>
-      _invoke('setTabSelectedColor', {'color': hexColor});
+  /// 下发原生外观：[colorMode] 为 light / dark / system，[foreground] 供原生
+  /// 顶栏与 HDS 底栏选中态，[background] 供自绘标题带与顶栏底板（均 '#RRGGBB'）。
+  /// 三者必须同一条消息，否则原生会出现模式已换、颜色还是旧主题的中间帧。
+  static Future<void> setAppearance({
+    required String colorMode,
+    required String foreground,
+    required String background,
+  }) => _invoke('setAppearance', {
+    'colorMode': colorMode,
+    'foreground': foreground,
+    'background': background,
+  });
 
   /// 向原生发送顶栏配置（Flutter 侧计算后通知 ArkTS）
   static Future<void> setShellTopBar({required bool useNativeTopBar}) =>
@@ -422,9 +451,87 @@ abstract class HarmonyChannel {
   static Future<void> setWindowOrientation(int orientation) async {
     if (!OS.isHarmony) return;
     try {
-      await _channel.invokeMethod(
-          'setWindowOrientation', {'orientation': orientation});
+      await _channel.invokeMethod('setWindowOrientation', {
+        'orientation': orientation,
+      });
     } catch (_) {}
+  }
+
+  /// 通用窗口方法发送器：非鸿蒙直接返回 null，原生异常（含旧版本没有该
+  /// method 的 [MissingPluginException]）一律静默降级，窗口能力缺失不应让
+  /// 调用方崩溃。
+  ///
+  /// 与 [_invoke] 的区别：这里需要把原生返回值取回来（窗口快照、进入/退出
+  /// 内容全屏是否成功等），且参数名/返回类型由 ArkTS 侧契约决定。
+  static Future<T?> invokeWindowMethod<T>(
+    String method, [
+    Map<String, Object?>? args,
+  ]) async {
+    if (!OS.isHarmony) return null;
+    try {
+      return await _channel.invokeMethod<T>(method, args);
+    } on PlatformException catch (_) {
+      return null;
+    } on MissingPluginException catch (_) {
+      return null;
+    }
+  }
+
+  /// 拉取一次原生窗口快照。
+  ///
+  /// 返回的键与 ArkTS 侧 WindowSnapshot 一致：isFreeWindowMode、maximized、
+  /// contentFullScreen、titleBarVisible、titleBarHeight、isMiniWindow、
+  /// isWindowMode。原生不再持有 landscape，方向由播放器回传。
+  static Future<Map<Object?, Object?>?> getWindowSnapshot() =>
+      invokeWindowMethod<Map<Object?, Object?>>('getWindowSnapshot');
+
+  /// 系统栏（状态栏 + 导航栏）显隐同步。
+  ///
+  /// [revision] 单调递增、[epoch] 标识本次会话：原生据此丢弃乱序落地或跨会话
+  /// 残留的旧消息（快速进出全屏时异步调用可能乱序）。
+  static Future<void> setSystemBarsHidden({
+    required bool hidden,
+    required int revision,
+    required int epoch,
+  }) async {
+    await invokeWindowMethod<void>('setSystemBarsHidden', {
+      'hidden': hidden,
+      'revision': revision,
+      'epoch': epoch,
+    });
+  }
+
+  /// 进入「内容全屏」：窗口仍占满屏，只隐藏系统栏与原生自绘标题带。
+  ///
+  /// 返回 true 表示原生窗口层已接管，调用方不必再走 media_kit 旧通道。
+  static Future<bool> enterContentFullScreen() async =>
+      await invokeWindowMethod<bool>('enterContentFullScreen') ?? false;
+
+  /// 退出「内容全屏」，返回值语义同 [enterContentFullScreen]。
+  static Future<bool> exitContentFullScreen() async =>
+      await invokeWindowMethod<bool>('exitContentFullScreen') ?? false;
+
+  /// 小窗横屏缩放开关：true 时开 enableLandscapeMultiWindow（小窗内全屏横屏），
+  /// false 时关掉。
+  static Future<void> setMiniWindowLandscape(bool landscape) async {
+    await invokeWindowMethod<void>('setMiniWindowLandscape', {
+      'landscape': landscape,
+    });
+  }
+
+  /// 系统装饰栏（带应用图标 + 标题的窗口顶栏）显隐。自由窗口形态下原生由
+  /// WindowChrome 独占，Dart 侧调用会被原生忽略。
+  static Future<void> setWindowDecorVisible({required bool visible}) async {
+    await invokeWindowMethod<void>('setWindowDecorVisible', {
+      'visible': visible,
+    });
+  }
+
+  /// 主动刷新一次安全区避让区（物理像素）。原生 getSafeArea 同时会订阅窗口
+  /// 安全区变化，之后由 onSafeAreaChange 推送。
+  static Future<void> refreshSafeArea() async {
+    final area = await invokeWindowMethod<Map<Object?, Object?>>('getSafeArea');
+    _updateSafeArea(area);
   }
 
   /// 添加UP主卡片到桌面（仅 Harmony）：原生保存UP数据并拉起添加引导页
@@ -443,13 +550,15 @@ abstract class HarmonyChannel {
     });
   }
 
-  /// 将应用内设定的主题颜色传递给原生层，用于原生层的深浅色模式感知
-  static Future<void> setSystemColorMode(String colorMode) =>
-      _invoke('setSystemColorMode', {'colorMode': colorMode});
-
   /// 横屏小窗的缩放比例固定值
   static const _miniWindowLandscapeScale = 0.75;
+
+  /// 播放器是否已把当前视频切到全屏横屏。由播放器经
+  /// [onLandscapeOrMiniWindowChange] 回传，原生侧不持有。
   static bool _landscape = false;
+
+  /// 当前是否处于系统小窗/受限窗口。与 [WindowFacts.isMiniWindow] 同源，
+  /// 保留本地副本是为了兼容老的原生推送路径（onFloatingWindowChange）。
   static bool _miniWindow = false;
 
   /// 当前是否处于系统自由小窗（悬浮窗/全景多窗）。小窗内窗口宽高比不代表
@@ -471,6 +580,7 @@ abstract class HarmonyChannel {
   static bool _freeWindowMode = false;
 
   static void _onFreeWindowModeChange(bool freeWindowMode) {
+    WindowFacts.isFreeWindowMode = freeWindowMode;
     if (_freeWindowMode == freeWindowMode) return;
     _freeWindowMode = freeWindowMode;
     _applyMiniWindowLandscape();
@@ -495,73 +605,104 @@ abstract class HarmonyChannel {
     final miniWindowChanged = _miniWindow != miniWindow;
     _landscape = landscape;
     _miniWindow = miniWindow;
+    WindowFacts.landscape = landscape;
+    WindowFacts.isMiniWindow = miniWindow;
     if (miniWindowChanged) _syncWindowDecor();
     _applyMiniWindowLandscape();
   }
 
+  /// 应用原生窗口快照：先落 [WindowFacts]（真源），再让本地副本与之一致，
+  /// 最后只有「横屏小窗」这一组合状态发生翻转时才真正调整缩放与装饰栏——
+  /// 原生在小窗内每次状态变化都会推快照，避免重复下发缩放造成视觉抖动。
+  static void _applyWindowSnapshot(Map<Object?, Object?> snapshot) {
+    final wasMiniWindow = _miniWindow;
+    final wasMiniWindowLandscape = isMiniWindowLandscape;
+    WindowFacts.applySnapshot(snapshot);
+    _miniWindow = WindowFacts.isMiniWindow;
+    _freeWindowMode = WindowFacts.isFreeWindowMode;
+    _windowMode = WindowFacts.isWindowMode;
+    // landscape 不在原生快照内，仍由播放器回传；这里只把本地镜像同步回去，
+    // 避免原生推快照把 WindowFacts.landscape 冲成默认值。
+    WindowFacts.landscape = _landscape;
+    // 装饰栏看的是「是否小窗」本身（与方向无关），小窗进出就要重算；缩放看
+    // 的才是「横屏小窗」这一组合，避免每次推快照都重设 scaleFactor 抖动。
+    if (wasMiniWindow != _miniWindow) _syncWindowDecor();
+    if (wasMiniWindowLandscape == isMiniWindowLandscape) return;
+    _applyMiniWindowLandscape();
+    _syncWindowDecor();
+  }
+
   static void _applyMiniWindowLandscape() {
-    if (isMiniWindowLandscape) {
-      _setMiniWindowLandscape(true);
-      ScaledWidgetsFlutterBinding.instance.scaleFactor =
-          _miniWindowLandscapeScale;
-    } else {
-      ScaledWidgetsFlutterBinding.instance.scaleFactor = Pref.uiScale;
-      _setMiniWindowLandscape(false);
-    }
+    final target = isMiniWindowLandscape;
+    ScaledWidgetsFlutterBinding.instance.scaleFactor = target
+        ? _miniWindowLandscapeScale
+        : Pref.uiScale;
+    setMiniWindowLandscape(target);
   }
 
-  static void _setMiniWindowLandscape(bool landscape) {
-    _channel.invokeMethod('setMiniWindowLandscape', {'landscape': landscape});
-  }
-
-  /// 启动时（runApp 之前）拉取窗口初始状态（是否自由多窗 / 受限窗口模式），
-  /// 并据此一次性下发系统栏模式（代替 main.dart 里的 edgeToEdge）。
+  /// 依据 [WindowFacts] 重算「横屏小窗」缩放与 enableLandscapeMultiWindow。
   ///
-  /// 原生只在 windowStatusChange 时推送 onFloatingWindowChange，应用直接在
-  /// 自由多窗里启动时收不到；且 Dart 侧 handler 注册前的通道消息最多缓存
-  /// 一条，靠原生「补发」不可靠，这里改为主动拉取。放在首帧之前、且不先发
-  /// edgeToEdge，是为了避免装饰栏「先出现再收回」的闪动；原生侧
-  /// EntryAbility 在窗口创建时已先隐藏一次，这里只是让 embedding 的状态与之
-  /// 一致（并把 viewPadding.top 钉成三键高度）。
+  /// 窗口事实变化后由 lib/harmony_adapt/window/window_bridge.dart 调用；缩放始终只
+  /// 在这一处落地，避免出现两个各自维护 scaleFactor 的入口。
+  static void syncMiniWindowLandscape() => _applyMiniWindowLandscape();
+
+  /// 依据 [WindowFacts] 重下发装饰栏显隐策略（自由窗口形态下装饰栏由原生
+  /// 独占，本方法不产生下发）。
+  static void syncWindowDecor() => _syncWindowDecor();
+
+  /// 应用一份原生窗口快照：更新 [WindowFacts] 与本类镜像状态，并在「横屏
+  /// 小窗」翻转时重算缩放与装饰栏。原生推送 onWindowSnapshot 时调用。
+  static void applyWindowSnapshot(Map<Object?, Object?> snapshot) =>
+      _applyWindowSnapshot(snapshot);
+
+  /// 启动时（runApp 之前）主动拉取窗口初始状态：是否自由多窗 / 受限窗口模式
+  /// （据此下发系统栏模式）、安全区避让区初值（见 [safeAreaInsets]）、装饰栏
+  /// 策略（见 [_syncWindowDecor]）。
+  ///
+  /// 主动拉取的必要性：原生只在 windowStatusChange 时推送
+  /// onFloatingWindowChange，应用直接在自由多窗里启动时收不到；且 Dart 侧
+  /// handler 注册前的通道消息最多缓存一条，靠原生「补发」不可靠。放在首帧之前
+  /// 是为了避免装饰栏「先出现再收回」的闪动（原生侧 EntryAbility 在窗口创建时
+  /// 已先隐藏一次）。
   static Future<void> initWindowState() async {
     if (!OS.isHarmony) return;
     try {
       final state = await _channel.invokeMethod<Map>('getWindowState');
       if (state != null) {
-        _windowMode = state['isWindowMode'] as bool? ?? _windowMode;
-        _freeWindowMode = state['isFreeWindowMode'] as bool? ?? false;
+        _windowMode = WindowFacts.isWindowMode =
+            state['isWindowMode'] as bool? ?? _windowMode;
+        _freeWindowMode = WindowFacts.isFreeWindowMode =
+            state['isFreeWindowMode'] as bool? ?? false;
         await onLandscapeOrMiniWindowChange(
           null,
           state['isFloatingWindow'] as bool?,
         );
       }
     } catch (_) {}
-    try {
-      _updateCutout(await _channel.invokeMethod<Map>('getCutoutAvoidArea'));
-    } catch (_) {}
-    try {
-      _updateDecorTop(await _channel.invokeMethod<num>('getDecorTopInset'));
-    } catch (_) {}
+    await refreshSafeArea();
     _syncWindowDecor();
   }
 
-  /// 摄像头挖孔（TYPE_CUTOUT）避让区，**物理像素**，窗口相对坐标，随旋转
-  /// 变化；由原生 getCutoutAvoidArea / onCutoutAvoidAreaChange 维护。
+  /// 拉取一次原生窗口快照并应用。启动时由 lib/harmony_adapt/window/window_bridge.dart
+  /// 调用；原生侧尚无 getWindowSnapshot 的旧版本返回 null，此时保留旧状态。
+  static Future<void> refreshWindowSnapshot() async {
+    final snapshot = await getWindowSnapshot();
+    if (snapshot != null) applyWindowSnapshot(snapshot);
+  }
+
+  /// 窗口安全区避让区，**物理像素**，窗口相对坐标，随旋转/窗口形态变化；
+  /// 四边为 max(TYPE_SYSTEM, TYPE_CUTOUT)。由原生 getSafeArea /
+  /// onSafeAreaChange 上报，在 main.dart 根 MediaQuery 里并入
+  /// padding/viewPadding，供 ViewSafeArea/SafeArea 直接使用。
   ///
-  /// 鸿蒙 embedding 算 viewPadding 只读 TYPE_SYSTEM（状态栏/导航栏），不读
-  /// 挖孔：横屏时 viewPadding.left/right 恒为 0、竖屏隐藏状态栏后
-  /// viewPadding.top 归 0，ViewSafeArea/SafeArea 都避不开挖孔。Android
-  /// embedding 会把 cutout 并进 viewPadding，上上游代码按该语义写，故在
-  /// main.dart 的根 MediaQuery 里把这里的值按边取 max 合并进
-  /// padding/viewPadding，让下游无需感知平台差异。
-  ///
-  /// 仅手机上报：平板/2in1 的摄像头在边框上，避让只会平白让出一条空带，
-  /// 原生侧直接不报（见 ETS HarmonyChannel.cutoutEnabled），此处恒为 zero。
-  static final ValueNotifier<EdgeInsets> cutoutInsets = ValueNotifier(
+  /// 独立上报的原因：embedding 算 viewPadding 只读 TYPE_SYSTEM，不读挖孔，
+  /// 横屏时 left/right 恒为 0、竖屏隐藏状态栏后 top 归 0。自由窗口的三键带
+  /// 也含在 TYPE_SYSTEM 内，一并覆盖。
+  static final ValueNotifier<EdgeInsets> safeAreaInsets = ValueNotifier(
     EdgeInsets.zero,
   );
 
-  static void _updateCutout(dynamic args) {
+  static void _updateSafeArea(dynamic args) {
     if (args is! Map) return;
     double side(String key) => (args[key] as num?)?.toDouble() ?? 0;
     final insets = EdgeInsets.fromLTRB(
@@ -570,23 +711,9 @@ abstract class HarmonyChannel {
       side('right'),
       side('bottom'),
     );
-    if (insets != cutoutInsets.value) {
-      cutoutInsets.value = insets;
+    if (insets != safeAreaInsets.value) {
+      safeAreaInsets.value = insets;
     }
-  }
-
-  /// 窗口顶部系统控件的避让高度，**物理像素**：系统顶部避让区（状态栏/小窗
-  /// 顶条）与自由多窗三键高度取 max。由原生 getDecorTopInset / onDecorTopInsetChange 维护。
-  ///
-  /// 原先完全依赖 embedding 把 viewPadding.top 钉成三键高度（见
-  /// [_syncWindowDecor]），但 embedding 新版在小窗、以及运行中才打开系统
-  /// 「自由多窗」时会把它钉成 0 且不再刷新，顶部内容压到系统控件下面。
-  /// 这里自己上报一份，在 [mergeCutout] 里与 top 取 max 兜底。
-  static final ValueNotifier<double> decorTopInset = ValueNotifier(0);
-
-  static void _updateDecorTop(dynamic top) {
-    if (top is! num) return;
-    decorTopInset.value = top.toDouble();
   }
 
   /// 根视图的顶部避让（逻辑像素，已按 uiScale 换算），等价于根 MediaQuery 的
@@ -598,113 +725,53 @@ abstract class HarmonyChannel {
   static double rootTopInset(BuildContext context) {
     final view = View.of(context);
     final dpr = view.devicePixelRatio;
-    final top = mergeCutout(
+    final top = mergeSafeArea(
       EdgeInsets.only(top: view.viewPadding.top / dpr),
       dpr,
     ).top;
     return top / ScaledWidgetsFlutterBinding.instance.scaleFactor;
   }
 
-  /// 把 [cutoutInsets]、[decorTopInset]（物理像素）换算为逻辑像素后与
-  /// [padding] 按边取 max。
+  /// 把 [safeAreaInsets]（物理像素）换算为逻辑像素后与 [padding] 按边取 max。
   /// [devicePixelRatio] 须是引擎上报的原始 DPR（uiScale 缩放前）。
-  static EdgeInsets mergeCutout(EdgeInsets padding, double devicePixelRatio) {
-    final cutout = cutoutInsets.value;
-    final decorTop = decorTopInset.value;
-    if (cutout == EdgeInsets.zero && decorTop == 0) return padding;
-    final c = cutout / devicePixelRatio;
+  static EdgeInsets mergeSafeArea(EdgeInsets padding, double devicePixelRatio) {
+    final area = safeAreaInsets.value;
+    if (area == EdgeInsets.zero) return padding;
+    final a = area / devicePixelRatio;
     return EdgeInsets.fromLTRB(
-      max(padding.left, c.left),
-      max(padding.top, max(c.top, decorTop / devicePixelRatio)),
-      max(padding.right, c.right),
-      max(padding.bottom, c.bottom),
+      max(padding.left, a.left),
+      max(padding.top, a.top),
+      max(padding.right, a.right),
+      max(padding.bottom, a.bottom),
     );
   }
 
-  /// 已下发给 embedding 的装饰栏策略：true = 隐藏（自由多窗沉浸），
+  /// 已下发给原生的装饰栏策略：true = 隐藏（自由多窗沉浸），
   /// false = 显示，null = 尚未下发。
   static bool? _decorHidden;
 
   /// 自由多窗（平板全景多窗 / 2in1）下隐藏系统装饰栏，让窗口顶部随内容沉浸。
   ///
-  /// 系统装饰栏是一条带应用图标 + 标题的独立色条（浅/深色各一套灰），与
-  /// colorScheme.surface 永远对不上色；只调 setDecorButtonStyle 改按钮颜色
-  /// 是不够的，栏本身得隐藏。
+  /// 系统装饰栏是一条带应用图标 + 标题的独立色条，与 colorScheme.surface 对不
+  /// 上色，只能整条隐藏（只改按钮颜色不够）。走原生 [setWindowDecorVisible]，
+  /// 不用 embedding 的 shouldHideWindowDecor 间接路径，原因见该方法注释。
   ///
-  /// 不能直接调 window.setWindowDecorVisible(false)：鸿蒙 embedding 的
-  /// PlatformPlugin.updateSystemUiOverlays 在每次 SystemChrome 设置系统栏、
-  /// 以及 app 回前台 restoreSystemUiOverlays 时，都会按自己的
-  /// showBarOrNavigation 重写装饰栏可见性——edgeToEdge（['status',
-  /// 'navigation']）→ 显示装饰栏并把 paddingTop 钉 0，直接调的隐藏会被覆盖。
-  /// embedding 约定的隐藏方式是只保留 'navigation'，即
-  /// setEnabledSystemUIOverlays([SystemUiOverlay.bottom])：它会
-  /// setWindowDecorVisible(false) 并把 viewPadding.top 钉成右上角三键区域
-  /// 高度（getTitleButtonRect），SimpleScaffold 的状态栏占位、首页零高
-  /// AppBar、视频页顶部黑条都据此避让，内容不会压到按钮下面。三键仍由系统
-  /// 悬浮绘制，颜色跟随应用颜色模式，视频/直播页顶部为黑时由
-  /// [setDecorDark] 切浅色。
+  /// 自由窗口内没有状态栏，故隐藏装饰栏不会误伤。代价：没有标题栏后不能再拖
+  /// 标题栏移动窗口（边缘缩放、三键不受影响）。
   ///
-  /// 自由窗口内没有状态栏，去掉 'status' 无副作用；回到全屏窗口时必须恢复
-  /// edgeToEdge，否则状态栏会被隐藏。代价：没有标题栏后不能再拖标题栏移动
-  /// 窗口（边缘缩放、三键不受影响）。
+  /// 自由窗口形态下装饰栏显隐由原生 WindowChrome 独占（系统装饰栏被隐藏、改
+  /// 由 ArkTS 自绘标题带），Dart 侧不得下发，否则会把自绘标题带顶掉。这里只
+  /// 处理平板系统小窗等非自由窗口。
   static void _syncWindowDecor() {
     if (!OS.isHarmony) return;
+    if (_freeWindowMode) {
+      _decorHidden = null;
+      return;
+    }
     final hide = _miniWindow;
     if (_decorHidden == hide) return;
     _decorHidden = hide;
-    if (hide) {
-      // SystemChrome.setEnabledSystemUIOverlays 在 Dart 侧已被移除，但鸿蒙
-      // embedding 的 PlatformChannel 仍处理这条消息，参数为
-      // SystemUiOverlay 的枚举名列表。
-      SystemChannels.platform.invokeMethod<void>(
-        'SystemChrome.setEnabledSystemUIOverlays',
-        const ['SystemUiOverlay.bottom'],
-      );
-    } else {
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    }
-  }
-
-  /// 自由多窗装饰栏按钮（全屏/最小化/关闭）的颜色跟随「按钮下方那条顶栏
-  /// 的实际底色」而非系统颜色模式：浅色模式下深色按钮叠在播放页黑色顶部上
-  /// 视觉不可见。顶部为深色内容的页面（视频/直播播放页）在可见期间持有此
-  /// 状态，使按钮切为浅色风格；无人持有时恢复跟随系统。用持有者集合而非
-  /// 开关，规避路由切换（如视频页跳视频页）中生命周期回调顺序的不确定性。
-  ///
-  /// 注意「播放页 == 顶部是黑的」并不恒成立：视频页竖屏滚动时顶栏会由黑
-  /// 渐变到 colorScheme.surface（浅色模式下即白色），此时必须放开持有让
-  /// 按钮变回深色，否则白底浅按钮不可辨认。故持有方应随顶栏底色变化调用
-  /// [setDecorDark] 更新，而不是进页面时一次性持有到底。
-  static final Set<Object> _darkDecorOwners = <Object>{};
-
-  /// 按 [dark] 更新 [owner] 的持有状态：顶栏底色为深色时持有（按钮浅色），
-  /// 变浅时释放（按钮跟随系统颜色模式）。重复调用同一状态是无害空操作。
-  static void setDecorDark(Object owner, bool dark) {
-    if (dark) {
-      holdDecorDark(owner);
-    } else {
-      releaseDecorDark(owner);
-    }
-  }
-
-  static void holdDecorDark(Object owner) {
-    if (!OS.isHarmony) return;
-    final wasEmpty = _darkDecorOwners.isEmpty;
-    _darkDecorOwners.add(owner);
-    if (wasEmpty) {
-      _setDecorButtonDark(true);
-    }
-  }
-
-  static void releaseDecorDark(Object owner) {
-    if (!OS.isHarmony) return;
-    if (_darkDecorOwners.remove(owner) && _darkDecorOwners.isEmpty) {
-      _setDecorButtonDark(false);
-    }
-  }
-
-  static void _setDecorButtonDark(bool dark) {
-    _channel.invokeMethod('setDecorButtonDark', {'dark': dark});
+    setWindowDecorVisible(visible: !hide);
   }
 }
 

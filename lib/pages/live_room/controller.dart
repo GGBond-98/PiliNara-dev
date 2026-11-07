@@ -19,6 +19,7 @@ import 'package:PiliPlus/models_new/live/live_fans_medal/data.dart';
 import 'package:PiliPlus/models_new/live/live_fans_medal/item.dart';
 import 'package:PiliPlus/models_new/live/live_medal_wall/uinfo_medal.dart';
 import 'package:PiliPlus/models_new/live/live_room_info_h5/data.dart';
+import 'package:PiliPlus/models_new/live/live_room_play_info/data.dart';
 import 'package:PiliPlus/models_new/live/live_room_play_info/codec.dart';
 import 'package:PiliPlus/models_new/live/live_room_play_info/stream.dart';
 import 'package:PiliPlus/models_new/live/live_superchat/item.dart';
@@ -70,6 +71,9 @@ class LiveRoomController extends GetxController {
   );
 
   final isLoaded = false.obs;
+
+  final isUnstartedRoom = false.obs;
+  int? liveStatus;
   final roomInfoH5 = Rxn<RoomInfoH5Data>();
 
   final liveTime = Rxn<int>();
@@ -140,14 +144,13 @@ class LiveRoomController extends GetxController {
   late final RxInt pageIndex = 0.obs;
   PageController? pageController;
 
-  // 同 cacheVideoQa：由 queryLiveUrl 按当前链路首次赋值，不再按平台预置
-  int? currentQn;
-  StreamSubscription<bool>? _networkScopeSub;
   // queryLiveUrl 无重入保护，链路翻转与用户切线路可能撞在一起
   bool _queryingLiveUrl = false;
-  final currentQnDesc = ''.obs;
   final RxBool isPortrait = false.obs;
-  late List<({int code, String desc})> acceptQnList = [];
+  late List<LiveQuality> acceptQnList = [];
+  final Rxn<LiveQuality> currentQn = Rxn<LiveQuality>(
+    PlatformUtils.isMobile ? null : .fromCode(Pref.liveQuality),
+  );
 
   late final bool isLogin;
   late final int mid;
@@ -181,6 +184,10 @@ class LiveRoomController extends GetxController {
 
   final RxnString watchedShow = RxnString();
   Widget get watchedWidget => Obx(() {
+    // 未开播时接口给的是历史累计人数，不是当前在线
+    if (isUnstartedRoom.value) {
+      return const SizedBox.shrink();
+    }
     if (watchedShow.value case final watchedShow?) {
       return Text(
         watchedShow,
@@ -343,17 +350,23 @@ class LiveRoomController extends GetxController {
     required bool autoplay,
     required bool autoFullScreenFlag,
   }) async {
-    currentQn ??= await ConnectivityUtils.isWiFi
-        ? Pref.liveQuality
-        : Pref.liveQualityCellular;
+    currentQn.value ??= .fromCode(
+      await ConnectivityUtils.isWiFi
+          ? Pref.liveQuality
+          : Pref.liveQualityCellular,
+    );
     final res = await LiveHttp.liveRoomInfo(
       roomId: roomId,
-      qn: currentQn,
+      qn: currentQn.value!.code,
       onlyAudio: plPlayerController.onlyPlayAudio.value,
     );
     if (res case Success(:final response)) {
       if (response.liveStatus != 1) {
-        _showDialog('当前直播间未开播');
+        if (response.liveStatus == 0 || response.liveStatus == 2) {
+          _initUnstartedRoom(response);
+        } else {
+          _showDialog('当前直播间未开播');
+        }
         return;
       }
       final playurl = response.playurlInfo?.playurl;
@@ -388,10 +401,36 @@ class LiveRoomController extends GetxController {
       // 置于 initLiveUrl 之后：恢复场景的首次拉取靠该标志让 playerInit 跳过
       // 数据源重建，完成后清零，切换路线/画质才会真正重建数据源
       isReturningFromPip = false;
+      isUnstartedRoom.value = false;
       isLoaded.value = true;
     } else {
       _showDialog(res.toString());
     }
+  }
+
+  // live_status == 2 是 B 站侧的「轮播中」（轮播 UP 的投稿），同样没有 playurl_info；
+  // 本应用不解析轮播视频，只拿它当未开播聊天室，仅在文案上区分。
+  bool get isRoundRoom => liveStatus == 2;
+
+  void _initUnstartedRoom(RoomPlayInfoData response) {
+    if (isUnstartedRoom.value) {
+      return;
+    }
+    liveStatus = response.liveStatus;
+    isUnstartedRoom.value = true;
+    ruid = response.uid;
+    if (response.roomId case final roomId?) {
+      this.roomId = roomId;
+    }
+    final upId = ruid;
+    if (Accounts.heartbeat.isLogin && upId != null) {
+      LiveHttp.startLiveHeartbeat(roomId, upId);
+    }
+    if (!isLoaded.value && Accounts.heartbeat.isLogin) {
+      _fetchBlockRules();
+    }
+    startLiveMsg();
+    isLoaded.value = true;
   }
 
   // 拉取成功前为 null（含小窗恢复后的重拉窗口期），使用处需判空
@@ -447,16 +486,9 @@ class LiveRoomController extends GetxController {
         .getOrFirst(formatIndex)
         .codec
         .getOrFirst(codecIndex);
+    acceptQnList = item.acceptQn;
     // 以服务端返回的码率为准
-    currentQn = item.currentQn;
-    acceptQnList = item.acceptQn.map((e) {
-      return (
-        code: e,
-        desc: LiveQuality.fromCode(e)?.desc ?? e.toString(),
-      );
-    }).toList();
-    currentQnDesc.value =
-        LiveQuality.fromCode(currentQn)?.desc ?? currentQn.toString();
+    currentQn.value = item.currentQn;
     videoUrl = VideoUtils.getLiveCdnUrl(item, index: liveUrlIndex);
     return playerInit(
       autoplay: autoplay,
@@ -507,7 +539,7 @@ class LiveRoomController extends GetxController {
             if (codecName.contains('av1')) {
               score -= 30;
             }
-            if (codecItem.currentQn == currentQn) {
+            if (codecItem.currentQn == currentQn.value) {
               score += 10;
             }
             if (urlInfo.$1 == liveUrlIndex) {
@@ -731,8 +763,6 @@ class LiveRoomController extends GetxController {
   @override
   void onClose() {
     plPlayerController.onNeedsPlayerInit = null;
-    _networkScopeSub?.cancel();
-    _networkScopeSub = null;
     if (identical(plPlayerController.sourceOwner, this)) {
       plPlayerController.sourceOwner = null;
     }
@@ -762,13 +792,11 @@ class LiveRoomController extends GetxController {
   }
 
   // 修改画质
-  Future<void>? changeQn(int qn) {
-    if (currentQn == qn) {
+  Future<void>? changeQn(LiveQuality qn) {
+    if (currentQn.value == qn) {
       return null;
     }
-    currentQn = qn;
-    currentQnDesc.value =
-        LiveQuality.fromCode(currentQn)?.desc ?? currentQn.toString();
+    currentQn.value = qn;
     return queryLiveUrl();
   }
 
@@ -817,7 +845,7 @@ class LiveRoomController extends GetxController {
           final content = first[15];
           final user = content['user'];
           // final midHash = first[7];
-          final uid = user['uid'];
+          final uid = user['uid'] as int;
           final msg = info[1];
           if (isBlocked(msg, uid)) {
             return;
@@ -854,9 +882,9 @@ class LiveRoomController extends GetxController {
               uemote: uemote,
               extra: liveExtra,
               reply: reply,
-              medalInfo: !GlobalData().showMedal || user['medal'] == null
-                  ? null
-                  : UinfoMedal.fromJson(user['medal']),
+              medalInfo: GlobalData().showMedal
+                  ? UinfoMedal.lightMedal(user['medal'])
+                  : null,
             ),
             DanmakuContentItem(
               msg,
@@ -1018,7 +1046,6 @@ class LiveRoomController extends GetxController {
     }
     autoWrapReportDialog(
       Get.context!,
-      ban: false,
       ReportOptions.liveDanmakuReport,
       withContent: ReportOptions.liveDanmakuReportCheck,
       contentRequired: ReportOptions.liveDanmakuReportCheck,

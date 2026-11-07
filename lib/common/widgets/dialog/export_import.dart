@@ -7,7 +7,7 @@ import 'package:PiliPlus/utils/date_utils.dart';
 import 'package:PiliPlus/utils/extension/theme_ext.dart';
 import 'package:PiliPlus/utils/storage_utils.dart';
 import 'package:PiliPlus/utils/utils.dart';
-import 'package:file_picker_ohos/file_picker_ohos.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart' show Clipboard;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get_core/src/get_main.dart';
@@ -31,7 +31,7 @@ void exportToLocalFile({
   final res = utf8.encode(onExport());
   StorageUtils.saveBytes2File(
     name:
-        'piliplus_${localFileName()}_'
+        'pilinara_${localFileName()}_'
         '${DateFormatUtils.only0_9.format(DateTime.now())}.json',
     bytes: res,
     allowedExtensions: const ['json'],

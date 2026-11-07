@@ -19,7 +19,6 @@ import 'package:PiliPlus/common/widgets/player_bar.dart';
 import 'package:PiliPlus/common/widgets/progress_bar/audio_video_progress_bar.dart';
 import 'package:PiliPlus/common/widgets/progress_bar/segment_progress_bar.dart';
 import 'package:PiliPlus/common/widgets/view_safe_area.dart';
-import 'package:PiliPlus/media_kit_adapt/simple_video.dart';
 import 'package:PiliPlus/models/common/sponsor_block/action_type.dart';
 import 'package:PiliPlus/models/common/sponsor_block/post_segment_model.dart';
 import 'package:PiliPlus/models/common/sponsor_block/segment_type.dart';
@@ -65,6 +64,7 @@ import 'package:PiliPlus/utils/extension/theme_ext.dart';
 import 'package:PiliPlus/utils/feed_back.dart';
 import 'package:PiliPlus/utils/id_utils.dart';
 import 'package:PiliPlus/utils/image_utils.dart';
+import 'package:PiliPlus/utils/ios/pip_helper.dart';
 import 'package:PiliPlus/utils/mobile_observer.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
@@ -86,10 +86,10 @@ import 'package:get/get.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:os_type/os_type.dart';
 import 'package:screen_brightness_platform_interface/constant/plugin_channel.dart';
 import 'package:screen_brightness_platform_interface/screen_brightness_platform_interface.dart';
-import 'package:window_manager/window_manager.dart';
 
 part 'widgets.dart';
 
@@ -107,7 +107,6 @@ class PLVideoPlayer extends StatefulWidget {
     this.showViewPoints,
     this.isPipMode = false,
     this.isInAppPip = false,
-    this.topInset,
     this.fill = Colors.black,
     this.alignment = Alignment.center,
     super.key,
@@ -136,10 +135,6 @@ class PLVideoPlayer extends StatefulWidget {
   /// 应用内小窗（我们独有的浮窗，非系统 PiP）。
   /// 窗口过小时不渲染字幕，避免（尤其是双语）字幕挤占画面。
   final bool isInAppPip;
-
-  /// 竖屏全屏时顶部控件的固定避让高度（进全屏前捕获的状态栏/挖孔高度），
-  /// null 表示不避让
-  final double? topInset;
 
   final Color fill;
   final Alignment alignment;
@@ -432,6 +427,8 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Keep playing in the PiP window.
+    if (Platform.isIOS && IOSPipHelper.isActive) return;
     final player = plPlayerController.videoPlayerController;
     if (player == null) return;
     if (state != AppLifecycleState.paused &&
@@ -529,7 +526,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
   ) {
     final videoDetail = introController.videoDetail.value;
     final isSeason = videoDetail.ugcSeason != null;
-    final isPart = videoDetail.pages != null && videoDetail.pages!.length > 1;
+    final isPart = videoDetail.hasParts;
     final isPgc = !videoDetailController.isUgc;
     final isPlayAll = videoDetailController.isPlayAll;
     final anySeason = isSeason || isPart || isPgc || isPlayAll;
@@ -1074,7 +1071,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
                       videoDetailController.persistVideoQa(quality);
                     },
                     child: Text(
-                      item.newDesc ?? '',
+                      item.newDesc ?? item.quality.toString(),
                       style: enabled
                           ? const TextStyle(color: Colors.white, fontSize: 13)
                           : const TextStyle(
@@ -1137,16 +1134,14 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
       if (!plPlayerController.isDesktopPip) .fullscreen,
     ];
     return PlayerBar(
-      children: [
-        Row(
-          mainAxisSize: .min,
-          children: userSpecifyItemLeft.map(progressWidget).toList(),
-        ),
-        Row(
-          mainAxisSize: .min,
-          children: userSpecifyItemRight.map(progressWidget).toList(),
-        ),
-      ],
+      left: Row(
+        mainAxisSize: .min,
+        children: userSpecifyItemLeft.map(progressWidget).toList(),
+      ),
+      right: Row(
+        mainAxisSize: .min,
+        children: userSpecifyItemRight.map(progressWidget).toList(),
+      ),
     );
   }
 
@@ -1187,8 +1182,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
   }
 
   void _initDanmakuMask() {
-    final maskController =
-        widget.videoDetailController?.danmakuMaskController;
+    final maskController = widget.videoDetailController?.danmakuMaskController;
     if (maskController == null || plPlayerController.isLive) return;
     // 本仓库的 videoController 是委托到 plPlayerController 的可空 getter
     //（上游是 initState 里赋值的 late 字段），掩码驱动需要非空实例。
@@ -1213,8 +1207,9 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
     final driver = _maskDriver;
     if (driver == null) return;
     _maskDriver = null;
-    widget.videoDetailController?.danmakuMaskController.frame
-        .removeListener(driver.update);
+    widget.videoDetailController?.danmakuMaskController.frame.removeListener(
+      driver.update,
+    );
     _transformationController.removeListener(driver.update);
     videoController?.rect.removeListener(driver.update);
     for (final subscription in _maskSubscriptions) {
@@ -1237,7 +1232,9 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
     final height = rect.height / _devicePixelRatio;
     final aspectRatio = videoFit.aspectRatio;
     final videoSize = Size(
-      aspectRatio == null ? rect.width / _devicePixelRatio : height * aspectRatio,
+      aspectRatio == null
+          ? rect.width / _devicePixelRatio
+          : height * aspectRatio,
       height,
     );
     final fit = DanmakuMaskGeometry.fittedBoxTransform(
@@ -1437,13 +1434,12 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
       }
     } else if (_gestureType == .right) {
       // 右边区域
-      final double level = maxHeight * 0.5;
       EasyThrottle.throttle(
         'setVolume',
         const Duration(milliseconds: 20),
         () {
           final double volumeRaw =
-              plPlayerController.volume.value - delta.dy / level;
+              plPlayerController.volume.value - delta.dy / (maxHeight * 0.5);
           final double volume = clampDouble(
             volumeRaw,
             0.0,
@@ -1659,13 +1655,13 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
         return;
       }
 
-      final double level = maxHeight * 0.5;
       EasyThrottle.throttle(
         'setVolume',
         const Duration(milliseconds: 20),
         () {
           final double volumeRaw =
-              plPlayerController.volume.value - event.localPanDelta.dy / level;
+              plPlayerController.volume.value -
+              event.localPanDelta.dy / (maxHeight * 0.5);
           final double volume = clampDouble(
             volumeRaw,
             0.0,
@@ -1782,7 +1778,8 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
     final isLive = plPlayerController.isLive;
     // 锁定按钮显示在右侧：与截图按钮同组垂直居中
     final lockBtnOnRight =
-        plPlayerController.showFsLockBtnRight && plPlayerController.showFsLockBtn;
+        plPlayerController.showFsLockBtnRight &&
+        plPlayerController.showFsLockBtn;
 
     final child = Stack(
       fit: StackFit.passthrough,
@@ -1794,11 +1791,10 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
           Positioned.fill(
             top: _kDanmakuTopInset,
             child: TopInsetPadding(
-              inset: portraitFullscreenTopInset(
+              inset: harmonyDecorTopInset(
+                context,
                 isFullScreen: isFullScreen,
-                isPortrait: maxHeight >= maxWidth,
                 removeSafeArea: plPlayerController.removeSafeArea,
-                topInset: widget.topInset,
               ),
               child: danmaku,
             ),
@@ -1824,9 +1820,6 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
                     ..updateSubtitleStyle();
                 },
                 child: Obx(() {
-                  // 同 _videoWidget：渲染路径切换会替换 VideoController，
-                  // 订阅 generation 才能让字幕重新绑到新的 controller 上。
-                  final gen = plPlayerController.playerGeneration.value;
                   final videoController = plPlayerController.videoController;
                   if (videoController == null) {
                     return const SizedBox.shrink();
@@ -1845,7 +1838,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
                       // 同 Video：_SubtitleViewState 只在 initState 订阅
                       // controller.player.stream.subtitle，didUpdateWidget
                       // 不会重新订阅，所以换了 controller 必须换 State。
-                      key: ValueKey(gen),
+                      key: ValueKey(videoController),
                       controller: videoController,
                       configuration: SubtitleViewConfiguration(
                         // 去掉 SubtitleView 内部 padding，外部手动管理
@@ -1982,9 +1975,11 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
               ignoring: true,
               child: Obx(
                 () {
-                  final desktopPreview = PlatformUtils.isDesktop &&
+                  final desktopPreview =
+                      PlatformUtils.isDesktop &&
                       plPlayerController.showDesktopProgressFeedback.value;
-                  final opacity = desktopPreview ||
+                  final opacity =
+                      desktopPreview ||
                           (!PlatformUtils.isDesktop &&
                               plPlayerController.isSeeking.value)
                       ? 1.0
@@ -2176,7 +2171,6 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
                     controller: _animationController,
                     isFullScreen: isFullScreen,
                     removeSafeArea: plPlayerController.removeSafeArea,
-                    topInset: widget.topInset,
                     child: plPlayerController.isDesktopPip
                         ? GestureDetector(
                             behavior: HitTestBehavior.translucent,
@@ -2637,8 +2631,8 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
               minScale: plPlayerController.enableShrinkVideoSize ? 0.75 : 1,
               maxScale: 2.0,
               boundaryMargin: plPlayerController.enableShrinkVideoSize
-                            ? const .all(double.infinity)
-                            : .zero,
+                  ? const .all(double.infinity)
+                  : .zero,
               panAxis: .aligned,
               transformationController: _transformationController,
               childKey: _videoKey,
@@ -2646,6 +2640,10 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
                 key: _videoKey,
                 child: Obx(
                   () {
+                    final videoController = plPlayerController.videoController;
+                    if (videoController == null) {
+                      return const SizedBox.shrink();
+                    }
                     final videoFit = plPlayerController.videoFit.value;
                     // 几何镜像：改这里的 FittedBox / flip / Transform 结构要同步 DanmakuMaskGeometry
                     return Transform.flip(
@@ -2655,7 +2653,13 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
                         fit: videoFit.boxFit,
                         alignment: widget.alignment,
                         child: SimpleVideo(
-                          controller: plPlayerController.videoController!,
+                          // 必须带 key：SimpleVideoState 只在 initState 订阅
+                          // controller.player.stream.width/height，
+                          // didUpdateWidget 不会重新订阅，所以 controller 换了
+                          // 必须换 State，否则会一直挂在已 dispose 的旧 controller
+                          // 上（画面全黑）。渲染路径切换会整体替换 controller。
+                          key: ValueKey(videoController),
+                          controller: videoController,
                           fill: widget.fill,
                           aspectRatio: videoFit.aspectRatio,
                         ),
@@ -2667,7 +2671,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
             ),
           ),
         );
-      }
+      },
     );
   }
 

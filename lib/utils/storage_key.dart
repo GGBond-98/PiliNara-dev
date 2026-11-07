@@ -29,10 +29,9 @@ abstract final class SettingBoxKey {
       bufferSize = 'bufferSize',
       bufferSec = 'bufferSec',
       hardwareDecoding = 'hardwareDecoding',
-      // HDR 输出（鸿蒙）
       enableHDR = 'enableHDR',
-      // HDR 色调映射用的面板峰值亮度（鸿蒙，nit）
       hdrPeakNits = 'hdrPeakNits',
+      hdrMatchVideoPeak = 'hdrMatchVideoPeak',
       videoSync = 'videoSync',
       autosync = 'autosync',
       p1080 = 'p1080',
@@ -194,6 +193,7 @@ abstract final class SettingBoxKey {
       showFsScreenshotBtn = 'showFsScreenshotBtn',
       showFsLockBtn = 'showFsLockBtn',
       showFsLockBtnRight = 'showFsLockBtnRight',
+      lockFsRotation = 'lockFsRotation',
       silentDownImg = 'silentDownImg',
       showMemberShop = 'showMemberShop',
       enablePlayAll = 'enablePlayAll',
@@ -217,7 +217,9 @@ abstract final class SettingBoxKey {
       fullScreenModeMigrated = 'fullScreenModeMigrated',
       liveStream = 'liveStream',
       enableDocProvider = 'enableDocProvider',
-      enableEmoteTooltip = 'enableEmoteTooltip';
+      enableEmoteTooltip = 'enableEmoteTooltip',
+      mineTabs = 'mineTabs',
+      buvid = 'buvid';
 
   static const String enableAiChat = 'enableAiChat',
       aiApiUrl = 'aiApiUrl',
@@ -347,6 +349,7 @@ abstract final class SettingBoxKey {
       msgBadgeMode = 'msgBadgeMode',
       msgUnReadTypeV2 = 'msgUnReadTypeV2',
       navBarSort = 'navBarSort',
+      // 旧版「我的页卡片编辑」的键，仅用于首次迁移到 mineTabs（见 Pref.mineTabs）
       mineCardSort = 'mineCardSort',
       tempPlayerConf = 'tempPlayerConf',
       reduceLuxColor = 'reduceLuxColor',
@@ -367,11 +370,13 @@ abstract final class LocalCacheKey {
       recommendBlockedMids = 'recommendBlockedMids',
       replyBlockedMids = 'replyBlockedMids',
       danmakuFilterRules = 'danmakuFilterRules',
-      downloadCollections = 'downloadCollections',
       lastLocalPlayed = 'lastLocalPlayed',
+      downloadFolders = 'downloadFolders',
+      /// 2.1.6 及更早的 fork 用它同时存自动归组，现只在首次启动时读一次，
+      /// 取回用户手工建的文件夹（见 DownloadFolderService 的导入逻辑）。
+      legacyDownloadCollections = 'downloadCollections',
       mixinKey = 'mixinKey',
       timeStamp = 'timeStamp',
-      buvid = 'buvid',
       remarkMids = 'remarkMids',
       cdnNodeList = 'cdnNodeList',
       cdnNodeListTime = 'cdnNodeListTime',
