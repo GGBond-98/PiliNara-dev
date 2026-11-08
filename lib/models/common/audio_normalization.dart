@@ -62,7 +62,8 @@ mixin AudioNormalizationMixin {
   // 鸿蒙：libmpv（libmpv-ohos-build）的 FFmpeg 为 --disable-everything
   // 白名单构建，不含 dynaudnorm/loudnorm，动态滤镜图创建失败会直接
   // 导致视频无法加载；改走「B 站实测响度 + volume 滤镜」静态增益
-  // （_ohosStaticGainExtras）。待 libmpv 补编滤镜后可恢复动态归一。
+  // （_ohosStaticGainExtras），经 mpv 的 af 链挂载。待 libmpv 补编
+  // 滤镜后可恢复动态归一。
   late final enableAudioNormalization =
       (Platform.isAndroid || OS.isHarmony) && _audioNormalization != '0';
   late final _param = AudioNormalization.getParamFromConfig(
@@ -94,6 +95,12 @@ mixin AudioNormalizationMixin {
   /// （达成跨视频音量一致），并以实测真峰值封顶防止削波。
   /// 实测/目标字段缺失（响度、峰值恒为负，>=0 视为未下发）或
   /// 增益幅度过小（<0.5dB）时不挂滤镜。
+  ///
+  /// 挂载方式用 af 链（lavfi 桥接 FFmpeg volume 滤镜，白名单已含）
+  /// 而不是 lavfi-complex：后者把 [aid1]/[ao] 接进过滤图，与
+  /// audio-files 外挂音轨的初始化强耦合，图建不起来时整个视频
+  /// 无法加载（实测部分视频会触发）；af 链不钉音轨选择，音频侧
+  /// 初始化失败时自动旁路，不影响加载。
   Map<String, String>? _ohosStaticGainExtras(
     Volume? volume, {
     Map<String, String>? map,
@@ -106,12 +113,13 @@ mixin AudioNormalizationMixin {
     final targetI = volume.targetI == 0 ? -16.0 : volume.targetI;
     final targetTp = volume.targetTp == 0 ? -1.5 : volume.targetTp;
     final gain = min(targetI - measuredI, targetTp - measuredTp);
-    if (gain.abs() < 0.5) return map;
-    final filter = '"[aid1] volume=${gain.toStringAsFixed(1)}dB [ao]"';
-    if (map != null) {
-      map[_kNormalizationKey] = filter;
-      return map;
+    if (!gain.isFinite || gain.abs() < 0.5) return map;
+    final filter = 'lavfi=[volume=${gain.toStringAsFixed(1)}dB]';
+    if (map == null) {
+      return {'af': filter};
     }
-    return {_kNormalizationKey: filter};
+    final af = map['af'];
+    map['af'] = af == null || af.isEmpty ? filter : '$af,$filter';
+    return map;
   }
 }
